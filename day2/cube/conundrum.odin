@@ -74,16 +74,16 @@ main :: proc() {
 	}
 	filename := arguments[0]
 
-	sum, error := process_file(filename, red, green, blue)
+	sum1, sum2, error := process_file(filename, red, green, blue)
 	if error != nil {
 		fmt.printf("Error while processing file '%s': %v\n", filename, error)
 		os.exit(1)
 	}
-	fmt.printf("answer: %d\n", sum)
+	fmt.printf("answer: part1 = %d part2 = %d\n", sum1, sum2)
 }
 
 process_file :: proc(filename: string, red, green, blue: uint) -> (
-	sum : uint,
+	sum1, sum2: uint,
 	err: Game_Error,
 ) {
 	data, ok := os.read_entire_file(filename)
@@ -95,26 +95,39 @@ process_file :: proc(filename: string, red, green, blue: uint) -> (
 	it := string(data)
 	for l in strings.split_lines_iterator(&it) {
 		if strings.trim_space(l) == "" do continue
-		sum += process_line(l, red, green, blue) or_return
+		sum1 += process_line_one(l, red, green, blue) or_return
+		sum2 += process_line_two(l) or_return
 	}
 
-	return sum, nil
+	return sum1, sum2, nil
 }
 
-process_line :: proc(line: string, red, green, blue: uint) -> (value: uint, err: Game_Error) {
+process_line_one :: proc(line: string, red, green, blue: uint) -> (value: uint, err: Game_Error) {
 	game := parse_line(line) or_return
 	for try in game.tries {
 		if try.red > red || try.green > green || try.blue > blue {
-			fmt.printf("%d (%d %d %d): %s\n", game.num, try.red, try.green, try.blue, line)
+			fmt.printf("1: %d (%d %d %d) = %s\n", game.num, try.red, try.green, try.blue, line)
 			return 0, nil
 		}
 	}
 	return game.num, nil
 }
 
-parse_line :: proc(line: string) -> (game: Game, err: Game_Error) {
-// 012345
+process_line_two :: proc(line: string) -> (value: uint, err: Game_Error) {
+	red, green, blue: uint
+	game := parse_line(line) or_return
+	for try in game.tries {
+		if try.red > red do red = try.red
+		if try.green > green do green = try.green
+		if try.blue > blue do blue = try.blue
+	}
+	value = red * green * blue
+	fmt.printf("2: %d (%d %d %d) = %s\n", value, red, green, blue, line)
+	return value, nil
+}
+
 // Game 1: 1 green, 6 red, 4 blue; 2 blue, 6 green, 7 red; 3 red, 4 blue, 6 green; 3 green; 3 blue, 2 green, 1 red
+parse_line :: proc(line: string) -> (game: Game, err: Game_Error) {
 	pos: uint = 5
 	end: uint
 
