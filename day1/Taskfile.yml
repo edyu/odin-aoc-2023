@@ -1,0 +1,29 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task: run
+
+  run:
+    deps:
+      - build
+    cmds:
+      - bin/trebuchet {{.CLI_ARGS}}
+    aliases:
+      - r
+    silent: true
+    method: none
+
+  build:
+    cmds:
+      - odin build trebuchet -out=bin/trebuchet
+    aliases:
+      - b
+    silent: true
+    sources:
+      - './trebuchet/**/*.odin'
+    generates:
+      - bin/trebuchet
+
+interval: 250ms
