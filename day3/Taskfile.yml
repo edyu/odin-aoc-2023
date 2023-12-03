@@ -1,0 +1,29 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task: run
+
+  run:
+    deps:
+      - build
+    cmds:
+      - bin/gear {{.CLI_ARGS}}
+    aliases:
+      - r
+    silent: true
+    method: none
+
+  build:
+    cmds:
+      - odin build gear -out=bin/gear
+    aliases:
+      - b
+    silent: true
+    sources:
+      - './gear/**/*.odin'
+    generates:
+      - bin/gear
+
+interval: 250ms
