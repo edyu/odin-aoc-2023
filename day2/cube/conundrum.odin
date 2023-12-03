@@ -124,6 +124,7 @@ process_file :: proc(filename: string, red, green, blue: uint) -> (
 
 process_line_one :: proc(line: string, red, green, blue: uint) -> (value: uint, err: Game_Error) {
 	game := parse_line(line) or_return
+	defer delete(game.tries)
 	for try in game.tries {
 		if try.red > red || try.green > green || try.blue > blue {
 			fmt.printf("1: %d (%d %d %d) = %s\n", game.num, try.red, try.green, try.blue, line)
@@ -136,12 +137,12 @@ process_line_one :: proc(line: string, red, green, blue: uint) -> (value: uint, 
 process_line_two :: proc(line: string) -> (value: uint, err: Game_Error) {
 	red, green, blue: uint
 	game := parse_line(line) or_return
+	defer delete(game.tries)
 	for try in game.tries {
 		if try.red > red do red = try.red
 		if try.green > green do green = try.green
 		if try.blue > blue do blue = try.blue
 	}
-	defer delete(game.tries)
 	value = red * green * blue
 	fmt.printf("2: %d (%d %d %d) = %s\n", value, red, green, blue, line)
 	return value, nil
