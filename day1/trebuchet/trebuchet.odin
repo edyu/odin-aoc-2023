@@ -52,7 +52,7 @@ main :: proc() {
 		fmt.printf("Error while processing file '%s': %v\n", filename, error)
 		os.exit(1)
 	}
-	fmt.printf("answer: part 1 = %d, part 2 = %d", sum1, sum2)
+	fmt.printf("answer: part 1 = %d, part 2 = %d\n", sum1, sum2)
 }
 
 process_file :: proc(
@@ -83,6 +83,7 @@ process_line_two :: proc(line: string) -> (value: int) {
 	begin, end: rune
 	got_begin: bool
 	result: strings.Builder
+	defer delete(result.buf)
 	for c, i in line {
 		if strings.contains_rune("0123456789", c) {
 			if !got_begin {
@@ -127,9 +128,9 @@ process_line_two :: proc(line: string) -> (value: int) {
 			}
 		}
 	}
-	fmt.sbprintf(&result, "%c%c", begin, end)
+	str := fmt.sbprintf(&result, "%c%c", begin, end)
 
-	value = strconv.atoi(strings.to_string(result))
+	value = strconv.atoi(str)
 	fmt.printf("2: %s = %d\n", line, value)
 	return
 }
@@ -138,6 +139,7 @@ process_line_one :: proc(line: string) -> (value: int) {
 	begin, end: rune
 	got_begin: bool
 	result: strings.Builder
+	defer delete(result.buf)
 	for c in line {
 		if strings.contains_rune("123456789", c) {
 			if !got_begin {
@@ -149,9 +151,9 @@ process_line_one :: proc(line: string) -> (value: int) {
 			}
 		}
 	}
-	fmt.sbprintf(&result, "%c%c", begin, end)
+	str := fmt.sbprintf(&result, "%c%c", begin, end)
 
-	value = strconv.atoi(strings.to_string(result))
+	value = strconv.atoi(str)
 	fmt.printf("1: %s = %d\n", line, value)
 	return
 }
