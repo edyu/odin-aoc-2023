@@ -66,21 +66,28 @@ process_file :: proc(filename: string) -> (sum1, sum2: int, err: Game_Error) {
 	defer delete(data)
 
 	it := string(data)
-	for l in strings.split_lines_iterator(&it) {
+	lines := strings.split_lines(it)
+	defer delete(lines)
+	scores := make([]int, len(lines))
+	defer delete(scores)
+	for l, i in lines {
 		if strings.trim_space(l) == "" do continue
-		sum1 += process_line_one(l) or_return
-		// sum2 += process_line_two(l) or_return
+		s1, s2 := process_line(l, i, &scores) or_return
+		sum1 += s1
+		sum2 += s2
 	}
 
 	return sum1, sum2, nil
 }
 
-process_line_one :: proc(line: string) -> (sum: int, err: Game_Error) {
+process_line :: proc(line: string, i: int, scores: ^[]int) -> (sum, score: int, err: Game_Error) {
 	winners: bit_set[1 ..= 99]
 	numbers: bit_set[1 ..= 99]
 
 	colon := strings.index_rune(line, ':')
 	vline := strings.index_rune(line, '|')
+
+	scores[i] += 1
 
 	winner_numbers := strings.split(line[colon + 1:vline - 1], " ")
 	defer delete(winner_numbers)
@@ -95,8 +102,21 @@ process_line_one :: proc(line: string) -> (sum: int, err: Game_Error) {
 	}
 	win_set := winners & numbers
 	card_num_wins := card(win_set)
-	if card_num_wins > 0 do sum = int(math.pow2_f16(card_num_wins - 1))
-	fmt.printf("card got %d winners (%d points): %v\n", card_num_wins, sum, win_set)
+	if card_num_wins > 0 {
+		sum = int(math.pow2_f16(card_num_wins - 1))
+		n := min(len(scores^), i + 1 + card_num_wins)
+		for j := i + 1; j < n; j += 1 {
+			scores[j] += scores[i]
+		}
+	}
+	log.debugf(
+		"card[%d] score=%d winners=%d (%d points): %v\n",
+		i + 1,
+		scores[i],
+		card_num_wins,
+		sum,
+		win_set,
+	)
 
-	return sum, nil
+	return sum, scores[i], nil
 }
