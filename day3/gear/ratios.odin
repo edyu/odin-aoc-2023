@@ -139,7 +139,7 @@ process_number :: proc(schematic: ^Schematic, line: string, row: int, index: int
 
 check_part :: proc(schematic: ^Schematic, part: Part) -> int {
 	n := part.location.x + 1
-	m := part.location.y + part.length + 1
+	m := part.location.y + part.length
 	for i := part.location.x - 1; i <= n; i += 1 {
 		for j := part.location.y - 1; j <= m; j += 1 {
 			// skip the number itself
