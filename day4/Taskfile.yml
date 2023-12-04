@@ -1,0 +1,29 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task: run
+
+  run:
+    deps:
+      - build
+    cmds:
+      - bin/scratchcard {{.CLI_ARGS}}
+    aliases:
+      - r
+    silent: true
+    method: none
+
+  build:
+    cmds:
+      - odin build scratchcard -out=bin/scratchcard
+    aliases:
+      - b
+    silent: true
+    sources:
+      - './scratchcard/**/*.odin'
+    generates:
+      - bin/scratchcard
+
+interval: 250ms
