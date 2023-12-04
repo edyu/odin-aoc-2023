@@ -21,9 +21,14 @@ Unable_To_Read_File :: struct {
 }
 
 Part :: struct {
-	number: int,
+	number:   int,
 	location: Coordinate,
-	length: int,
+	length:   int,
+}
+
+Gear :: struct {
+	location: Coordinate,
+	parts:    [2]^Part,
 }
 
 Coordinate :: struct {
@@ -32,8 +37,8 @@ Coordinate :: struct {
 }
 
 Schematic :: struct {
-	rows: int,
-	cols: int,
+	rows:    int,
+	cols:    int,
 	diagram: map[Coordinate]rune,
 }
 
@@ -69,61 +74,83 @@ main :: proc() {
 
 	sum1, sum2, error := process_file(filename)
 	if error != nil {
-		fmt.printf("Error while processing file '%s': %v\n", filename, error)
+		fmt.eprintf("Error while processing file '%s': %v\n", filename, error)
 		os.exit(1)
 	}
 	fmt.printf("answer: part1 = %d part2 = %d\n", sum1, sum2)
 }
 
-process_file :: proc(filename: string) -> (
-	sum1, sum2: int,
-	err: Schematic_Error,
-) {
+process_file :: proc(filename: string) -> (sum1, sum2: int, err: Schematic_Error) {
 	data, ok := os.read_entire_file(filename)
 	if !ok {
-		return 0, 0, Unable_To_Read_File{ filename = filename }
+		return 0, 0, Unable_To_Read_File{filename = filename}
 	}
 	defer delete(data)
 
 	it := string(data)
-	schematic : Schematic
+	schematic: Schematic
 	defer delete(schematic.diagram)
-	engine : [dynamic]Part
-	defer delete(engine)
+	parts: [dynamic]Part
+	defer delete(parts)
+	gears: [dynamic]Gear
+	defer delete(gears)
 	for l in strings.split_lines_iterator(&it) {
 		if strings.trim_space(l) == "" do continue
-		populate_schematic(&schematic, l, &engine)
+		populate_schematic(&schematic, l, &parts, &gears)
 	}
 	fmt.printf("schematic has rows=%d cols=%d\n", schematic.rows, schematic.cols)
 
-	for part in engine {
+	for part in parts {
 		sum1 += check_part(&schematic, part)
 	}
-	return sum1, 0, nil
+	for gear, i in gears {
+		ratio, is_gear := check_gear(&schematic, &parts, &gears[i])
+		if is_gear {
+			sum2 += ratio
+		}
+	}
+	return sum1, sum2, nil
 }
 
-populate_schematic :: proc(schematic: ^Schematic, line: string, engine: ^[dynamic]Part) {
-	fmt.printf("processing line %d\n", schematic.rows)
+populate_schematic :: proc(
+	schematic: ^Schematic,
+	line: string,
+	parts: ^[dynamic]Part,
+	gears: ^[dynamic]Gear,
+) {
 	if schematic.rows == 0 do schematic.cols = len(line)
 	for i := 0; i < len(line); {
-		schematic.diagram[Coordinate{ x = schematic.rows, y = i }] = rune(line[i])
+		schematic.diagram[Coordinate{x = schematic.rows, y = i}] = rune(line[i])
 		switch line[i] {
-			case '.':
-			case '0'..='9': 
-				part, skip := process_number(schematic, line, schematic.rows, i)
-				fmt.printf("found number=%d\n", part.number)
-				i += skip
-				append(engine, part)
-				continue
-			case:
-				fmt.printf("found symbol=%c\n", line[i])
+		case '.':
+		case '0' ..= '9':
+			part, skip := process_number(schematic, line, schematic.rows, i)
+			i += skip
+			append(parts, part)
+			continue
+		case '*':
+			gear: Gear
+			gear.location = Coordinate {
+				x = schematic.rows,
+				y = i,
+			}
+			append(gears, gear)
+		case:
 		}
 		i += 1
 	}
 	schematic.rows += 1
 }
 
-process_number :: proc(schematic: ^Schematic, line: string, row: int, index: int) -> (part: Part, skip: int) {
+process_number :: proc(
+	schematic: ^Schematic,
+	line: string,
+	row: int,
+	index: int,
+) -> (
+	part: Part,
+	skip: int,
+) {
 	for i := index; i < len(line); i += 1 {
 		if strings.contains_rune("0123456789", rune(line[i])) {
 			skip += 1
@@ -131,7 +158,10 @@ process_number :: proc(schematic: ^Schematic, line: string, row: int, index: int
 	}
 	if (skip > 0) {
 		part.number = strconv.atoi(line[index:index + skip])
-		part.location = Coordinate{ x = row, y = index }
+		part.location = Coordinate {
+			x = row,
+			y = index,
+		}
 		part.length = skip
 	}
 	return
@@ -143,21 +173,60 @@ check_part :: proc(schematic: ^Schematic, part: Part) -> int {
 	for i := part.location.x - 1; i <= n; i += 1 {
 		for j := part.location.y - 1; j <= m; j += 1 {
 			// skip the number itself
-			if i == part.location.x && j >= part.location.y && j < part.location.y + part.length do continue 
+			if i == part.location.x && j >= part.location.y && j < part.location.y + part.length do continue
 			if check_coordinate(schematic.rows, schematic.cols, i, j) {
-				if schematic.diagram[Coordinate{ x = i, y = j}] != '.' &&
-					!strings.contains_rune("0123456789", schematic.diagram[Coordinate{ x = i, y = j}]) {
-					fmt.printf("found part number %d\n", part.number)
+				if schematic.diagram[Coordinate{x = i, y = j}] != '.' &&
+				   !strings.contains_rune(
+						   "0123456789",
+						   schematic.diagram[Coordinate{x = i, y = j}],
+					   ) {
+					// log.debugf("found part number %d\n", part.number)
 					return part.number
 				}
-			}	
+			}
 		}
 	}
 	return 0
 }
 
-check_coordinate :: proc(rows, cols, x, y : int) -> bool {
+check_coordinate :: proc(rows, cols, x, y: int) -> bool {
 	if x >= 0 && y >= 0 && x < rows && y < cols do return true
 	return false
 }
 
+is_neighbor :: proc(part: Part, gear: Gear) -> bool {
+	if part.location.x >= gear.location.x - 1 && part.location.x <= gear.location.x + 1 {
+		if (part.location.y >= gear.location.y - 1 && part.location.y <= gear.location.y + 1) ||
+		   (part.location.y + part.length - 1 >= gear.location.y - 1 &&
+				   part.location.y + part.length - 1 <= gear.location.y + 1) {
+			return true
+		}
+	}
+	return false
+}
+
+check_gear :: proc(
+	schematic: ^Schematic,
+	parts: ^[dynamic]Part,
+	gear: ^Gear,
+) -> (
+	ratio: int,
+	is_gear: bool,
+) {
+	i := 0
+	for part in parts {
+		if is_neighbor(part, gear^) {
+			if i > 2 do break
+			gear.parts[i] = &part
+			i += 1
+		}
+	}
+
+	if i != 2 {
+		gear.parts[0] = nil
+		gear.parts[1] = nil
+		return 0, false
+	}
+	// log.debugf("found gear(x=%d, y=%d): part1=%d part2=%d\n", gear.location.x, gear.location.y, gear.parts[0].number, gear.parts[1].number)
+	return gear.parts[0].number * gear.parts[1].number, true
+}
