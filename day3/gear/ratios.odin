@@ -50,13 +50,19 @@ main :: proc() {
 
 	defer {
 		if len(track.allocation_map) > 0 {
-			fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
+			fmt.eprintf(
+				"=== %v allocations not freed: ===\n",
+				len(track.allocation_map),
+			)
 			for _, entry in track.allocation_map {
 				fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
 			}
 		}
 		if len(track.bad_free_array) > 0 {
-			fmt.eprintf("=== %v incorrect frees: ===\n", len(track.bad_free_array))
+			fmt.eprintf(
+				"=== %v incorrect frees: ===\n",
+				len(track.bad_free_array),
+			)
 			for entry in track.bad_free_array {
 				fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
 			}
@@ -80,7 +86,12 @@ main :: proc() {
 	fmt.printf("answer: part1 = %d part2 = %d\n", sum1, sum2)
 }
 
-process_file :: proc(filename: string) -> (sum1, sum2: int, err: Schematic_Error) {
+process_file :: proc(
+	filename: string,
+) -> (
+	sum1, sum2: int,
+	err: Schematic_Error,
+) {
 	data, ok := os.read_entire_file(filename)
 	if !ok {
 		return 0, 0, Unable_To_Read_File{filename = filename}
@@ -98,7 +109,11 @@ process_file :: proc(filename: string) -> (sum1, sum2: int, err: Schematic_Error
 		if strings.trim_space(l) == "" do continue
 		populate_schematic(&schematic, l, &parts, &gears)
 	}
-	fmt.printf("schematic has rows=%d cols=%d\n", schematic.rows, schematic.cols)
+	fmt.printf(
+		"schematic has rows=%d cols=%d\n",
+		schematic.rows,
+		schematic.cols,
+	)
 
 	for part in parts {
 		sum1 += check_part(&schematic, part)
@@ -120,7 +135,9 @@ populate_schematic :: proc(
 ) {
 	if schematic.rows == 0 do schematic.cols = len(line)
 	for i := 0; i < len(line); {
-		schematic.diagram[Coordinate{x = schematic.rows, y = i}] = rune(line[i])
+		schematic.diagram[Coordinate{x = schematic.rows, y = i}] = rune(
+			line[i],
+		)
 		switch line[i] {
 		case '.':
 		case '0' ..= '9':
@@ -195,8 +212,10 @@ check_coordinate :: proc(rows, cols, x, y: int) -> bool {
 }
 
 is_neighbor :: proc(part: Part, gear: Gear) -> bool {
-	if part.location.x >= gear.location.x - 1 && part.location.x <= gear.location.x + 1 {
-		if (part.location.y >= gear.location.y - 1 && part.location.y <= gear.location.y + 1) ||
+	if part.location.x >= gear.location.x - 1 &&
+	   part.location.x <= gear.location.x + 1 {
+		if (part.location.y >= gear.location.y - 1 &&
+			   part.location.y <= gear.location.y + 1) ||
 		   (part.location.y + part.length - 1 >= gear.location.y - 1 &&
 				   part.location.y + part.length - 1 <= gear.location.y + 1) {
 			return true

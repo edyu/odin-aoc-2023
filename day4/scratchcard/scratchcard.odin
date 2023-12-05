@@ -29,13 +29,19 @@ main :: proc() {
 
 	defer {
 		if len(track.allocation_map) > 0 {
-			fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
+			fmt.eprintf(
+				"=== %v allocations not freed: ===\n",
+				len(track.allocation_map),
+			)
 			for _, entry in track.allocation_map {
 				fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
 			}
 		}
 		if len(track.bad_free_array) > 0 {
-			fmt.eprintf("=== %v incorrect frees: ===\n", len(track.bad_free_array))
+			fmt.eprintf(
+				"=== %v incorrect frees: ===\n",
+				len(track.bad_free_array),
+			)
 			for entry in track.bad_free_array {
 				fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
 			}
@@ -80,7 +86,14 @@ process_file :: proc(filename: string) -> (sum1, sum2: int, err: Game_Error) {
 	return sum1, sum2, nil
 }
 
-process_line :: proc(line: string, i: int, scores: ^[]int) -> (sum, score: int, err: Game_Error) {
+process_line :: proc(
+	line: string,
+	i: int,
+	scores: ^[]int,
+) -> (
+	sum, score: int,
+	err: Game_Error,
+) {
 	winners: bit_set[1 ..= 99]
 	numbers: bit_set[1 ..= 99]
 

@@ -27,13 +27,13 @@ Color :: enum {
 }
 
 Try :: struct {
-	red: uint,
+	red:   uint,
 	green: uint,
-	blue: uint,
+	blue:  uint,
 }
 
 Game :: struct {
-	num: uint,
+	num:   uint,
 	tries: [dynamic]Try,
 }
 
@@ -45,13 +45,19 @@ main :: proc() {
 
 	defer {
 		if len(track.allocation_map) > 0 {
-			fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
+			fmt.eprintf(
+				"=== %v allocations not freed: ===\n",
+				len(track.allocation_map),
+			)
 			for _, entry in track.allocation_map {
 				fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
 			}
 		}
 		if len(track.bad_free_array) > 0 {
-			fmt.eprintf("=== %v incorrect frees: ===\n", len(track.bad_free_array))
+			fmt.eprintf(
+				"=== %v incorrect frees: ===\n",
+				len(track.bad_free_array),
+			)
 			for entry in track.bad_free_array {
 				fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
 			}
@@ -61,7 +67,7 @@ main :: proc() {
 
 	arguments := os.args[1:]
 	red: uint = 12
-	green: uint = 13 
+	green: uint = 13
 	blue: uint = 14
 
 	if len(arguments) != 1 && len(arguments) != 4 {
@@ -102,7 +108,10 @@ main :: proc() {
 	fmt.printf("answer: part1 = %d part2 = %d\n", sum1, sum2)
 }
 
-process_file :: proc(filename: string, red, green, blue: uint) -> (
+process_file :: proc(
+	filename: string,
+	red, green, blue: uint,
+) -> (
 	sum1, sum2: uint,
 	err: Game_Error,
 ) {
@@ -122,12 +131,25 @@ process_file :: proc(filename: string, red, green, blue: uint) -> (
 	return sum1, sum2, nil
 }
 
-process_line_one :: proc(line: string, red, green, blue: uint) -> (value: uint, err: Game_Error) {
+process_line_one :: proc(
+	line: string,
+	red, green, blue: uint,
+) -> (
+	value: uint,
+	err: Game_Error,
+) {
 	game := parse_line(line) or_return
 	defer delete(game.tries)
 	for try in game.tries {
 		if try.red > red || try.green > green || try.blue > blue {
-			fmt.printf("1: %d (%d %d %d) = %s\n", game.num, try.red, try.green, try.blue, line)
+			fmt.printf(
+				"1: %d (%d %d %d) = %s\n",
+				game.num,
+				try.red,
+				try.green,
+				try.blue,
+				line,
+			)
 			return 0, nil
 		}
 	}
@@ -153,7 +175,7 @@ parse_line :: proc(line: string) -> (game: Game, err: Game_Error) {
 	pos: uint = 5
 	end: uint
 
-	game.num, end = parse_number(line, 5) 
+	game.num, end = parse_number(line, 5)
 	// fmt.printf("game: %d end: '%c'\n", game.num, line[end])
 	end = end + 1 // skip _
 
@@ -170,12 +192,12 @@ parse_line :: proc(line: string) -> (game: Game, err: Game_Error) {
 			color, end = parse_color(line, pos)
 			// fmt.printf("color: %v end[%d]\n", color, end)
 			switch color {
-				case .Red: 
-					try.red = num
-				case .Green:
-					try.green = num
-				case .Blue:
-					try.blue = num
+			case .Red:
+				try.red = num
+			case .Green:
+				try.green = num
+			case .Blue:
+				try.blue = num
 			}
 			if end >= len(line) || line[end] == ';' do break
 			end = end + 1
@@ -188,7 +210,7 @@ parse_line :: proc(line: string) -> (game: Game, err: Game_Error) {
 	return game, nil
 }
 
-parse_number:: proc(line: string, pos: uint) -> (num: uint, end: uint) {
+parse_number :: proc(line: string, pos: uint) -> (num: uint, end: uint) {
 	end = pos
 	for c, i in line[pos:] {
 		end = pos + uint(i)
@@ -196,20 +218,24 @@ parse_number:: proc(line: string, pos: uint) -> (num: uint, end: uint) {
 			continue
 		} else {
 			break
-		} 
- 	}
+		}
+	}
 	return uint(strconv.atoi(line[pos:end])), end
 }
 
-parse_color:: proc(line: string, pos: uint) -> (Color, uint) {
+parse_color :: proc(line: string, pos: uint) -> (Color, uint) {
 	switch line[pos] {
-		case 'r':  // red
-			return Color.Red, pos + 3
-		case 'g': // green
-			return Color.Green, pos + 5
-		case 'b': // blue
-			return Color.Blue, pos + 4
-		case:  // unreachable
- 			return nil, pos
+	case 'r':
+		// red
+		return Color.Red, pos + 3
+	case 'g':
+		// green
+		return Color.Green, pos + 5
+	case 'b':
+		// blue
+		return Color.Blue, pos + 4
+	case:
+		// unreachable
+		return nil, pos
 	}
 }
