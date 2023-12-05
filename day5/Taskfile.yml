@@ -1,0 +1,29 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task: run
+
+  run:
+    deps:
+      - build
+    cmds:
+      - bin/seed {{.CLI_ARGS}}
+    aliases:
+      - r
+    silent: true
+    method: none
+
+  build:
+    cmds:
+      - odin build seed -out=bin/seed
+    aliases:
+      - b
+    silent: true
+    sources:
+      - './seed/**/*.odin'
+    generates:
+      - bin/seed
+
+interval: 250ms
