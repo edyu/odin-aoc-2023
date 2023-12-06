@@ -14,7 +14,9 @@ Almanac_Error :: union {
 	mem.Allocator_Error,
 }
 
-Parse_Error :: struct {}
+Parse_Error :: struct {
+	reason: string,
+}
 
 Unable_To_Read_File :: struct {
 	filename: string,
@@ -22,9 +24,9 @@ Unable_To_Read_File :: struct {
 }
 
 Range :: struct {
-	dst_start: int,
-	src_start: int,
-	length:    int,
+	source:      int,
+	destination: int,
+	length:      int,
 }
 
 Entry :: struct {
@@ -73,18 +75,19 @@ main :: proc() {
 	}
 	filename := arguments[0]
 
-	sum1, sum2, error := process_file(filename)
+	min1, min2, error := process_file(filename)
 	if error != nil {
 		fmt.eprintf("Error while processing file '%s': %v\n", filename, error)
 		os.exit(1)
 	}
-	fmt.printf("answer: part1 = %d part2 = %d\n", sum1, sum2)
+	fmt.printf("answer: part1 = %d part2 = %d\n", min1, min2)
 }
 
 process_file :: proc(
 	filename: string,
 ) -> (
-	sum1, sum2: int,
+	min1: int,
+	min2: int,
 	err: Almanac_Error,
 ) {
 	data, ok := os.read_entire_file(filename)
@@ -96,62 +99,82 @@ process_file :: proc(
 	it := string(data)
 	lines := strings.split_lines(it)
 	defer delete(lines)
-	scores := make([]int, len(lines))
-	defer delete(scores)
-	for l, i in lines {
-		if strings.trim_space(l) == "" do continue
-		s1, s2 := process_line(l, i, &scores) or_return
-		sum1 += s1
-		sum2 += s2
+	seeds, end := get_seeds(lines) or_return
+	defer delete(seeds)
+	for i := end + 1; i < len(lines); {
+		seeds, end = process_map(lines, i, seeds) or_return
+		fmt.printf("end=%d len(seeds)=%d\n", end, len(seeds))
+		i = end + 1
 	}
 
-	return sum1, sum2, nil
+	for s in seeds {
+		fmt.printf("locaton: %d\n", s)
+		if min1 == 0 || min1 > s do min1 = s
+	}
+
+	return min1, 0, nil
 }
 
-process_line :: proc(
-	line: string,
-	i: int,
-	scores: ^[]int,
+get_seeds :: proc(
+	lines: []string,
 ) -> (
-	sum, score: int,
+	seeds: [dynamic]int,
+	end: int,
 	err: Almanac_Error,
 ) {
-	winners: bit_set[1 ..= 99]
-	numbers: bit_set[1 ..= 99]
-
-	colon := strings.index_rune(line, ':')
-	vline := strings.index_rune(line, '|')
-
-	scores[i] += 1
-
-	winner_numbers := strings.split(line[colon + 1:vline - 1], " ")
-	defer delete(winner_numbers)
-	for numstr in winner_numbers {
-		winners |= {strconv.atoi(numstr)}
-	}
-
-	card_numbers := strings.split(line[vline + 1:], " ")
-	defer delete(card_numbers)
-	for numstr in card_numbers {
-		numbers |= {strconv.atoi(numstr)}
-	}
-	win_set := winners & numbers
-	card_num_wins := card(win_set)
-	if card_num_wins > 0 {
-		sum = int(math.pow2_f16(card_num_wins - 1))
-		n := min(len(scores^), i + 1 + card_num_wins)
-		for j := i + 1; j < n; j += 1 {
-			scores[j] += scores[i]
+	line := lines[0]
+	// seeds: 
+	if line[0:7] == "seeds: " {
+		seed_strings := strings.split(line[7:], " ")
+		defer delete(seed_strings)
+		for s in seed_strings {
+			append(&seeds, strconv.atoi(s))
 		}
-	}
-	log.debugf(
-		"card[%d] score=%d winners=%d (%d points): %v\n",
-		i + 1,
-		scores[i],
-		card_num_wins,
-		sum,
-		win_set,
-	)
+	} else do return seeds, 0, Parse_Error{reason = "wrong almanac format"}
+	return seeds, 1, nil
+}
 
-	return sum, scores[i], nil
+process_map :: proc(
+	lines: []string,
+	idx: int,
+	source: [dynamic]int,
+) -> (
+	destination: [dynamic]int,
+	end: int,
+	err: Almanac_Error,
+) {
+	colon := strings.index_rune(lines[idx], ':')
+	if colon > 0 {
+		defer delete(source)
+		i: int
+		ranges: [dynamic]Range
+		defer delete(ranges)
+		for i = idx + 1; i < len(lines); i += 1 {
+			if lines[i] == "" do break
+			range_string := strings.split(lines[i], " ")
+			defer delete(range_string)
+			if len(range_string) != 3 {
+				return destination, i, Parse_Error{"wrong range format"}
+			}
+			range: Range
+			range.destination = strconv.atoi(range_string[0])
+			range.source = strconv.atoi(range_string[1])
+			range.length = strconv.atoi(range_string[2])
+			append(&ranges, range)
+
+			fmt.printf("range: %v\n", range)
+		}
+		for s in source {
+			found: bool
+			for r in ranges {
+				if s >= r.source && s < r.source + r.length {
+					append(&destination, r.destination + (s - r.source))
+					found = true
+					break
+				}
+			}
+			if !found do append(&destination, s)
+		}
+		return destination, i, nil
+	} else do return source, idx, Parse_Error{"no map header"}
 }
