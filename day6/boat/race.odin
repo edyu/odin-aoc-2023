@@ -92,7 +92,7 @@ process_file :: proc(
 	it := string(data)
 	lines := strings.split_lines(it)
 	defer delete(lines)
-	records := get_records(lines) or_return
+	records, record := get_records(lines) or_return
 	defer delete(records)
 
 	ways1 = 1
@@ -100,6 +100,8 @@ process_file :: proc(
 		fmt.printf("record[%d]=%v\n", i, r)
 		ways1 *= find_winning_strategies(r)
 	}
+	fmt.printf("record=%v\n", record)
+	ways2 = find_winning_strategies(record)
 
 	return ways1, ways2, nil
 }
@@ -108,6 +110,7 @@ get_records :: proc(
 	lines: []string,
 ) -> (
 	records: [dynamic]Record,
+	record: Record,
 	err: Race_Error,
 ) {
 	if lines[0][0:6] == "Time: " && lines[1][0:10] == "Distance: " {
@@ -119,9 +122,14 @@ get_records :: proc(
 		defer delete(distance_strings)
 		i := 0
 		j := 0
+		time_sb, distance_sb: [dynamic]string
+		defer delete(time_sb)
+		defer delete(distance_sb)
 		for i < len(time_strings) && j < len(distance_strings) {
 			for strings.trim_space(time_strings[i]) == "" do i += 1
 			for strings.trim_space(distance_strings[j]) == "" do j += 1
+			append(&time_sb, time_strings[i])
+			append(&distance_sb, distance_strings[j])
 			append(
 				&records,
 				Record {
@@ -132,21 +140,27 @@ get_records :: proc(
 			i += 1
 			j += 1
 		}
-		return records, nil
+		time_str := strings.join(time_sb[:], "")
+		defer delete(time_str)
+		distance_str := strings.join(distance_sb[:], "")
+		defer delete(distance_str)
+		record.time = strconv.atoi(time_str)
+		record.distance = strconv.atoi(distance_str)
+		return records, record, nil
 	}
-	return records, Parse_Error{reason = "wrong race record format"}
+	return records, record, Parse_Error{reason = "wrong race record format"}
 }
 
 find_winning_strategies :: proc(record: Record) -> (ways: int) {
 	for i := 1; i < record.time; i += 1 {
 		if i * (record.time - i) > record.distance {
-			fmt.printf(
-				"%d * %d = %d > %d\n",
-				i,
-				record.time - i,
-				i * (record.time - i),
-				record.distance,
-			)
+			// fmt.printf(
+			// 	"%d * %d = %d > %d\n",
+			// 	i,
+			// 	record.time - i,
+			// 	i * (record.time - i),
+			// 	record.distance,
+			// )
 			ways += 1
 		}
 	}
