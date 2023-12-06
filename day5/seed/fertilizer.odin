@@ -23,21 +23,15 @@ Unable_To_Read_File :: struct {
 	error:    os.Errno,
 }
 
-Range :: struct {
+Range_Map :: struct {
 	source:      int,
 	destination: int,
 	length:      int,
 }
 
-Entry :: struct {
-	seed:        int,
-	soil:        int,
-	fertilizer:  int,
-	water:       int,
-	light:       int,
-	temperature: int,
-	humidity:    int,
-	location:    int,
+Range :: struct {
+	seed:   int,
+	length: int,
 }
 
 main :: proc() {
@@ -100,19 +94,28 @@ process_file :: proc(
 	lines := strings.split_lines(it)
 	defer delete(lines)
 	seeds, end := get_seeds(lines) or_return
+	end2 := end
 	defer delete(seeds)
+	seeds2 := parse_seed_ranges(seeds)
+	defer delete(seeds2)
+
 	for i := end + 1; i < len(lines); {
-		seeds, end = process_map(lines, i, seeds) or_return
-		fmt.printf("end=%d len(seeds)=%d\n", end, len(seeds))
+		seeds, end = process_map(lines, i, &seeds) or_return
 		i = end + 1
 	}
-
 	for s in seeds {
-		fmt.printf("locaton: %d\n", s)
 		if min1 == 0 || min1 > s do min1 = s
 	}
 
-	return min1, 0, nil
+	for i := end2 + 1; i < len(lines); {
+		seeds2, end2 = process_range_map(lines, i, &seeds2) or_return
+		i = end2 + 1
+	}
+	for s in seeds2 {
+		if min2 == 0 || min2 > s.seed do min2 = s.seed
+	}
+
+	return min1, min2, nil
 }
 
 get_seeds :: proc(
@@ -134,47 +137,174 @@ get_seeds :: proc(
 	return seeds, 1, nil
 }
 
+expand_seed_range :: proc(range: Range) -> (seeds: [dynamic]int) {
+	for i := 0; i < range.length; i += 1 {
+		append(&seeds, range.seed + i)
+	}
+	return seeds
+}
+
+parse_seed_ranges :: proc(ranges: [dynamic]int) -> (seeds: [dynamic]Range) {
+	for i := 0; i < len(ranges); i += 2 {
+		append(&seeds, Range{seed = ranges[i], length = ranges[i + 1]})
+	}
+	return seeds
+}
+
+parse_range_maps :: proc(
+	lines: []string,
+	idx: int,
+) -> (
+	maps: [dynamic]Range_Map,
+	end: int,
+	err: Almanac_Error,
+) {
+	for i := idx + 1; i < len(lines); i += 1 {
+		end = i
+		if lines[i] == "" do break
+		map_string := strings.split(lines[i], " ")
+		defer delete(map_string)
+		if len(map_string) != 3 {
+			return maps, end, Parse_Error{"wrong range format"}
+		}
+		range_map: Range_Map
+		range_map.destination = strconv.atoi(map_string[0])
+		range_map.source = strconv.atoi(map_string[1])
+		range_map.length = strconv.atoi(map_string[2])
+		append(&maps, range_map)
+	}
+	return maps, end, nil
+}
+
 process_map :: proc(
 	lines: []string,
 	idx: int,
-	source: [dynamic]int,
+	source: ^[dynamic]int,
 ) -> (
 	destination: [dynamic]int,
 	end: int,
 	err: Almanac_Error,
 ) {
+	log.debugf("processing %s\n", lines[idx])
 	colon := strings.index_rune(lines[idx], ':')
 	if colon > 0 {
-		defer delete(source)
-		i: int
-		ranges: [dynamic]Range
-		defer delete(ranges)
-		for i = idx + 1; i < len(lines); i += 1 {
-			if lines[i] == "" do break
-			range_string := strings.split(lines[i], " ")
-			defer delete(range_string)
-			if len(range_string) != 3 {
-				return destination, i, Parse_Error{"wrong range format"}
-			}
-			range: Range
-			range.destination = strconv.atoi(range_string[0])
-			range.source = strconv.atoi(range_string[1])
-			range.length = strconv.atoi(range_string[2])
-			append(&ranges, range)
-
-			fmt.printf("range: %v\n", range)
-		}
+		defer delete(source^)
+		maps, i := parse_range_maps(lines, idx) or_return
+		defer delete(maps)
 		for s in source {
 			found: bool
-			for r in ranges {
-				if s >= r.source && s < r.source + r.length {
-					append(&destination, r.destination + (s - r.source))
+			for m in maps {
+				if s >= m.source && s < m.source + m.length {
+					append(&destination, m.destination + (s - m.source))
 					found = true
 					break
 				}
 			}
-			if !found do append(&destination, s)
+			if !found {
+				// fmt.printf("non-range: %d\n", s)
+				append(&destination, s)
+			}
 		}
 		return destination, i, nil
-	} else do return source, idx, Parse_Error{"no map header"}
+	} else do return source^, idx, Parse_Error{"no map header"}
+}
+
+process_range_map :: proc(
+	lines: []string,
+	idx: int,
+	source: ^[dynamic]Range,
+) -> (
+	destination: [dynamic]Range,
+	end: int,
+	err: Almanac_Error,
+) {
+	log.debugf("processing %s\n", lines[idx])
+	colon := strings.index_rune(lines[idx], ':')
+	if colon > 0 {
+		defer delete(source^)
+		maps, i := parse_range_maps(lines, idx) or_return
+		defer delete(maps)
+		for s in source {
+			found: bool
+			// fmt.printf("source: %v\n", s)
+			for m in maps {
+				// fmt.printf("range_map: %v\n", m)
+				// out of range
+				if s.seed + s.length <= m.source ||
+				   s.seed >= m.source + m.length {
+					// fmt.println("out of range:", s)
+					continue
+				}
+				if s.seed >= m.source {
+					if s.seed + s.length <= m.source + m.length {
+						// fmt.println("completely inside range:", s, m)
+						// completely inside
+						inside := Range {
+							seed   = m.destination + (s.seed - m.source),
+							length = s.length,
+						}
+						append(&destination, inside)
+						found = true
+					} else { 	// if s.seed + s.length > m.source + m.length
+						// front is inside
+						// add inside range first
+						// fmt.println("front inside range:", s, m)
+						inside := Range {
+							seed   = m.destination + (s.seed - m.source),
+							length = m.length - (s.seed - m.source),
+						}
+						append(&destination, inside)
+						outside := Range {
+							seed   = s.seed + inside.length,
+							length = s.length - inside.length,
+						}
+						append(source, outside)
+						found = true
+					}
+				} else { 	// s.seed < m.source
+					if s.seed + s.length <= m.source + m.length {
+						// fmt.println("back inside range:", s, m)
+						// back is inside
+						// add inside range first
+						inside := Range {
+							seed   = m.destination,
+							length = s.seed + s.length - m.source,
+						}
+						append(&destination, inside)
+						outside := Range {
+							seed   = s.seed,
+							length = m.source - s.seed,
+						}
+						append(source, outside)
+						found = true
+					} else {
+						// front and back are outside
+						// fmt.println("middle inside range:", s, m)
+						front := Range {
+							seed   = s.seed,
+							length = m.source - s.seed,
+						}
+						append(source, front)
+						inside := Range {
+							seed   = m.destination,
+							length = m.length,
+						}
+						append(&destination, inside)
+						back := Range {
+							seed   = s.seed + front.length + m.length,
+							length = s.length - front.length - m.length,
+						}
+						append(source, back)
+						found = true
+					}
+				}
+				if found do break
+			}
+			if !found {
+				fmt.printf("non-range: %v\n", s)
+				append(&destination, s)
+			}
+		}
+		return destination, i, nil
+	} else do return source^, idx, Parse_Error{"no map header"}
 }
