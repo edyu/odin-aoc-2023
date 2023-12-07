@@ -1,0 +1,29 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task: run
+
+  run:
+    deps:
+      - build
+    cmds:
+      - bin/camel {{.CLI_ARGS}}
+    aliases:
+      - r
+    silent: true
+    method: none
+
+  build:
+    cmds:
+      - odin build camel -out=bin/camel
+    aliases:
+      - b
+    silent: true
+    sources:
+      - './camel/**/*.odin'
+    generates:
+      - bin/camel
+
+interval: 250ms
