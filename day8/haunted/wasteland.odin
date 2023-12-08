@@ -23,7 +23,15 @@ Unable_To_Read_File :: struct {
 	error:    os.Errno,
 }
 
-Network :: struct {}
+Step :: enum {
+	L,
+	R,
+}
+
+Choice :: struct {
+	left:  string,
+	right: string,
+}
 
 main :: proc() {
 	context.logger = log.create_console_logger()
@@ -73,6 +81,48 @@ process_file :: proc(filename: string) -> (step1: int, step2: int, err: Network_
 	lines := strings.split_lines(it)
 	defer delete(lines)
 
+	instructions: []Step = parse_instructions(lines[0])
+	defer delete(instructions)
+	network: map[string]Choice = parse_network(lines[2:])
+	defer delete(network)
+
+	done: bool
+	step := "AAA"
+	for !done {
+		for i in 0 ..< len(instructions) {
+			// fmt.println("checking", step)
+			if step == "ZZZ" {
+				done = true
+				break
+			}
+			choice := network[step]
+			// fmt.println("found ", choice)
+			if instructions[i] == .L do step = choice.left
+			else do step = choice.right
+			step1 += 1
+		}
+	}
 	return step1, step2, nil
+}
+
+parse_instructions :: proc(line: string) -> (steps: []Step) {
+	steps = make([]Step, len(line))
+	for s, i in line {
+		if s == 'L' do steps[i] = .L
+		else do steps[i] = .R
+	}
+	return steps
+}
+
+parse_network :: proc(lines: []string) -> (network: map[string]Choice) {
+	// network = make(map[string]Choice, len(lines))
+	for line in lines {
+		if line == "" do break
+		network[line[0:3]] = Choice {
+			left  = line[7:10],
+			right = line[12:15],
+		}
+	}
+	return network
 }
 
