@@ -1,0 +1,29 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task: run
+
+  run:
+    deps:
+      - build
+    cmds:
+      - bin/haunted {{.CLI_ARGS}}
+    aliases:
+      - r
+    silent: true
+    method: none
+
+  build:
+    cmds:
+      - odin build haunted -out=bin/haunted
+    aliases:
+      - b
+    silent: true
+    sources:
+      - './haunted/**/*.odin'
+    generates:
+      - bin/haunted
+
+interval: 250ms
