@@ -41,13 +41,19 @@ main :: proc() {
 
 	defer {
 		if len(track.allocation_map) > 0 {
-			fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
+			fmt.eprintf(
+				"=== %v allocations not freed: ===\n",
+				len(track.allocation_map),
+			)
 			for _, entry in track.allocation_map {
 				fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
 			}
 		}
 		if len(track.bad_free_array) > 0 {
-			fmt.eprintf("=== %v incorrect frees: ===\n", len(track.bad_free_array))
+			fmt.eprintf(
+				"=== %v incorrect frees: ===\n",
+				len(track.bad_free_array),
+			)
 			for entry in track.bad_free_array {
 				fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
 			}
@@ -70,7 +76,13 @@ main :: proc() {
 	fmt.printf("answer: part1 = %d part2 = %d\n", step1, step2)
 }
 
-process_file :: proc(filename: string) -> (step1: int, step2: int, err: Network_Error) {
+process_file :: proc(
+	filename: string,
+) -> (
+	step1: int,
+	step2: int,
+	err: Network_Error,
+) {
 	data, ok := os.read_entire_file(filename)
 	if !ok {
 		return 0, 0, Unable_To_Read_File{filename = filename}
@@ -88,21 +100,60 @@ process_file :: proc(filename: string) -> (step1: int, step2: int, err: Network_
 
 	done: bool
 	step := "AAA"
+	if step in network {
+		for !done {
+			for i in 0 ..< len(instructions) {
+				// fmt.println("checking", step)
+				if step == "ZZZ" {
+					done = true
+					break
+				}
+				choice := network[step]
+				// fmt.println("found ", choice)
+				if instructions[i] == .L do step = choice.left
+				else do step = choice.right
+				step1 += 1
+			}
+		}
+	}
+
+	done = false
+	steps := get_starting_steps(network)
+	fmt.println("found total of", len(steps), "starting steps:", steps)
+	defer delete(steps)
 	for !done {
 		for i in 0 ..< len(instructions) {
-			// fmt.println("checking", step)
-			if step == "ZZZ" {
-				done = true
-				break
+			for s in steps {
+				if s[2] == 'Z' do done = true
+				else {
+					done = false
+					break
+				}
 			}
-			choice := network[step]
-			// fmt.println("found ", choice)
-			if instructions[i] == .L do step = choice.left
-			else do step = choice.right
-			step1 += 1
+			if done do break
+			for s, j in steps {
+				choice := network[s]
+				if instructions[i] == .L do steps[j] = choice.left
+				else do steps[j] = choice.right
+			}
+
+			step2 += 1
 		}
 	}
 	return step1, step2, nil
+}
+
+get_starting_steps :: proc(
+	network: map[string]Choice,
+) -> (
+	steps: [dynamic]string,
+) {
+	for s in network {
+		if s[2] == 'A' {
+			append(&steps, s)
+		}
+	}
+	return
 }
 
 parse_instructions :: proc(line: string) -> (steps: []Step) {
@@ -125,4 +176,3 @@ parse_network :: proc(lines: []string) -> (network: map[string]Choice) {
 	}
 	return network
 }
-
