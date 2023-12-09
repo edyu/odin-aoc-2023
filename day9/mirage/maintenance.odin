@@ -74,6 +74,7 @@ process_file :: proc(filename: string) -> (part1: int, part2: int, err: History_
 	for l in lines {
 		if l == "" do break
 		part1 += predict_history(l)
+		part2 += goback_history(l)
 	}
 
 	return part1, part2, nil
@@ -104,6 +105,34 @@ find_next :: proc(values: []int) -> (next: int) {
 	}
 	if done do next = last
 	else do next = last + find_next(step)
+	return
+}
+
+goback_history :: proc(line: string) -> (lookback: int) {
+	string_values := strings.split(line, " ")
+	defer delete(string_values)
+	values := make([]int, len(string_values))
+	defer delete(values)
+	for v, i in string_values {
+		values[i] = strconv.atoi(v)
+	}
+
+	lookback = find_previous(values)
+	return
+}
+
+find_previous :: proc(values: []int) -> (previous: int) {
+	step := make([]int, len(values) - 1)
+	defer delete(step)
+	first := values[0]
+	done: bool
+	for i in 0 ..< len(values) - 1 {
+		step[i] = values[i + 1] - values[i]
+		if step[i] == 0 do done = true
+		else do done = false
+	}
+	if done do previous = first
+	else do previous = first - find_previous(step)
 	return
 }
 
