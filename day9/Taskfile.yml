@@ -17,7 +17,7 @@ tasks:
 
   build:
     cmds:
-      - odin build mirage -out=bin/mirage
+      - odin build mirage -o:speed -out=bin/mirage
     aliases:
       - b
     silent: true

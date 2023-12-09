@@ -7,6 +7,7 @@ import "core:os"
 import "core:slice"
 import "core:strconv"
 import "core:strings"
+import "core:time"
 
 History_Error :: union {
 	Unable_To_Read_File,
@@ -25,25 +26,31 @@ Unable_To_Read_File :: struct {
 
 main :: proc() {
 	context.logger = log.create_console_logger()
-	track: mem.Tracking_Allocator
-	mem.tracking_allocator_init(&track, context.allocator)
-	context.allocator = mem.tracking_allocator(&track)
+	allocator_storage := make([]u8, 8 * mem.Megabyte)
+	arena: mem.Arena
+	mem.arena_init(&arena, allocator_storage)
+	allocator := mem.arena_allocator(&arena)
+	context.allocator = allocator
+	context.temp_allocator = allocator
+	// track: mem.Tracking_Allocator
+	// mem.tracking_allocator_init(&track, context.allocator)
+	// context.allocator = mem.tracking_allocator(&track)
 
-	defer {
-		if len(track.allocation_map) > 0 {
-			fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
-			for _, entry in track.allocation_map {
-				fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
-			}
-		}
-		if len(track.bad_free_array) > 0 {
-			fmt.eprintf("=== %v incorrect frees: ===\n", len(track.bad_free_array))
-			for entry in track.bad_free_array {
-				fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
-			}
-		}
-		mem.tracking_allocator_destroy(&track)
-	}
+	// defer {
+	// 	if len(track.allocation_map) > 0 {
+	// 		fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
+	// 		for _, entry in track.allocation_map {
+	// 			fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
+	// 		}
+	// 	}
+	// 	if len(track.bad_free_array) > 0 {
+	// 		fmt.eprintf("=== %v incorrect frees: ===\n", len(track.bad_free_array))
+	// 		for entry in track.bad_free_array {
+	// 			fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
+	// 		}
+	// 	}
+	// 	mem.tracking_allocator_destroy(&track)
+	// }
 	arguments := os.args[1:]
 
 	if len(arguments) < 1 {
@@ -52,12 +59,17 @@ main :: proc() {
 	}
 	filename := arguments[0]
 
+	time_start := time.now()
 	part1, part2, error := process_file(filename)
+	time_took := time.diff(time_start, time.now())
+	memory_used := arena.peak_used
 	if error != nil {
 		fmt.eprintf("Error while processing file '%s': %v\n", filename, error)
 		os.exit(1)
 	}
 	fmt.printf("answer: part1 = %d part2 = %d\n", part1, part2)
+	fmt.printf("time took %v\n", time_took)
+	fmt.printf("memory used %v bytes\n", memory_used)
 }
 
 process_file :: proc(filename: string) -> (part1: int, part2: int, err: History_Error) {
