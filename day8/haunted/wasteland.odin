@@ -98,49 +98,33 @@ process_file :: proc(
 	network: map[string]Choice = parse_network(lines[2:])
 	defer delete(network)
 
-	done: bool
 	step := "AAA"
 	if step in network {
-		for !done {
-			for i in 0 ..< len(instructions) {
-				// fmt.println("checking", step)
-				if step == "ZZZ" {
-					done = true
-					break
-				}
-				choice := network[step]
-				// fmt.println("found ", choice)
-				if instructions[i] == .L do step = choice.left
-				else do step = choice.right
-				step1 += 1
-			}
-		}
+		step1 = find_path(network, instructions, step, part1_done)
 	}
 
-	done = false
 	steps := get_starting_steps(network)
+	cur_step: int
 	fmt.println("found total of", len(steps), "starting steps:", steps)
 	defer delete(steps)
-	for !done {
-		for i in 0 ..< len(instructions) {
-			for s in steps {
-				if s[2] == 'Z' do done = true
-				else {
-					done = false
-					break
-				}
-			}
-			if done do break
-			for s, j in steps {
-				choice := network[s]
-				if instructions[i] == .L do steps[j] = choice.left
-				else do steps[j] = choice.right
-			}
+	for j in 0 ..< len(steps) {
+		cur_step = find_path(network, instructions, steps[j], part2_done)
 
-			step2 += 1
-		}
+		fmt.printf("path[%d] took %d steps\n", j, cur_step)
+		if j == 0 do step2 = cur_step
+		else do step2 = find_lcm(step2, cur_step)
+		fmt.printf("current lcm is %d\n", step2)
 	}
+
 	return step1, step2, nil
+}
+
+part1_done :: proc(step: string) -> bool {
+	return step == "ZZZ"
+}
+
+part2_done :: proc(step: string) -> bool {
+	return step[2] == 'Z'
 }
 
 get_starting_steps :: proc(
@@ -154,6 +138,33 @@ get_starting_steps :: proc(
 		}
 	}
 	return
+}
+
+find_path :: proc(
+	network: map[string]Choice,
+	instructions: []Step,
+	step: string,
+	is_done: proc(_: string) -> bool,
+) -> (
+	step1: int,
+) {
+	step := step
+	done: bool
+	for !done {
+		for i in 0 ..< len(instructions) {
+			// fmt.println("checking", step)
+			if is_done(step) {
+				done = true
+				break
+			}
+			choice := network[step]
+			// fmt.println("found ", choice)
+			if instructions[i] == .L do step = choice.left
+			else do step = choice.right
+			step1 += 1
+		}
+	}
+	return step1
 }
 
 parse_instructions :: proc(line: string) -> (steps: []Step) {
@@ -175,4 +186,18 @@ parse_network :: proc(lines: []string) -> (network: map[string]Choice) {
 		}
 	}
 	return network
+}
+
+find_lcm :: proc(a, b: int) -> int {
+	return a * b / find_gcd(a, b)
+}
+
+find_gcd :: proc(a, b: int) -> int {
+	a, b := a, b
+	r: int
+	for b != 0 {
+		r = a % b
+		a, b = b, r
+	}
+	return a
 }
