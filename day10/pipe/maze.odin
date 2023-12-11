@@ -24,6 +24,18 @@ Unable_To_Read_File :: struct {
 	error:    os.Errno,
 }
 
+Pipe :: struct {
+	row, col: int,
+	tile:     rune,
+}
+
+Direction :: enum {
+	North,
+	East,
+	South,
+	West,
+}
+
 main :: proc() {
 	context.logger = log.create_console_logger()
 	// allocator_storage := make([]u8, 8 * mem.Megabyte)
@@ -82,22 +94,21 @@ process_file :: proc(filename: string) -> (part1: int, part2: int, err: Maze_Err
 	it := string(data)
 	lines := strings.split_lines(it)
 	defer delete(lines)
-	maze, x, y := find_maze(lines) or_return
+	maze := find_maze(lines) or_return
 	defer delete(maze)
-	fmt.printf("found starting pipe at %d %d\n", x, y)
+	fmt.printf("found starting pipe at %d %d:\n", maze[0].row, maze[0].col)
 
-	fmt.printf("maze[%d, %d]:\n", x, y)
 	for p in maze {
-		fmt.printf("%c ", p)
+		fmt.printf("%c@[%d, %d]\n", p.tile, p.row, p.col)
 	}
 	fmt.println("")
 
-	part1 = len(maze)
+	part1 = len(maze) / 2
 
 	return part1, part2, nil
 }
 
-find_maze :: proc(lines: []string) -> (maze: [dynamic]rune, x, y: int, err: Maze_Error) {
+find_maze :: proc(lines: []string) -> (maze: []Pipe, err: Maze_Error) {
 	row, col: int
 	for l, r in lines {
 		for s, c in l {
@@ -130,12 +141,82 @@ find_maze :: proc(lines: []string) -> (maze: [dynamic]rune, x, y: int, err: Maze
 	fmt.printf("N=%c, W=%c, S=%c, E=%c\n", N, W, S, E)
 
 	if B == '.' {
-		return maze, row, col, Parse_Error{reason = "can't figure out starting pipe"}
+		return maze, Parse_Error{reason = "can't figure out starting pipe"}
 	} else {
-		append(&maze, B)
-	}
+		pipes := make([dynamic]Pipe)
+		dir: Direction
+		start := Pipe {
+			tile = B,
+			row  = row,
+			col  = col,
+		}
+		append(&pipes, start)
+		switch start.tile {
+		case '|', 'L', 'J':
+			dir = .North
+			row = row - 1
+		case '-', 'F':
+			dir = .East
+			col = col + 1
+		case '7':
+			dir = .South
+			row = row + 1
+		}
+		follow_pipe(&pipes, lines, row, col, dir)
 
-	return maze, row, col, nil
+		return pipes[:], nil
+	}
+}
+
+follow_pipe :: proc(maze: ^[dynamic]Pipe, lines: []string, row, col: int, dir: Direction) {
+	tile := rune(lines[row][col])
+	if tile == 'S' do return
+
+	pipe := Pipe {
+		tile = tile,
+		row  = row,
+		col  = col,
+	}
+	append(maze, pipe)
+
+	switch dir {
+	case .North:
+		switch tile {
+		case '|':
+			follow_pipe(maze, lines, row - 1, col, .North)
+		case '7':
+			follow_pipe(maze, lines, row, col - 1, .West)
+		case 'F':
+			follow_pipe(maze, lines, row, col + 1, .East)
+		}
+	case .South:
+		switch tile {
+		case '|':
+			follow_pipe(maze, lines, row + 1, col, .South)
+		case 'J':
+			follow_pipe(maze, lines, row, col - 1, .West)
+		case 'L':
+			follow_pipe(maze, lines, row, col + 1, .East)
+		}
+	case .East:
+		switch tile {
+		case '-':
+			follow_pipe(maze, lines, row, col + 1, .East)
+		case 'J':
+			follow_pipe(maze, lines, row - 1, col, .North)
+		case '7':
+			follow_pipe(maze, lines, row + 1, col, .South)
+		}
+	case .West:
+		switch tile {
+		case '-':
+			follow_pipe(maze, lines, row, col - 1, .West)
+		case 'L':
+			follow_pipe(maze, lines, row - 1, col, .North)
+		case 'F':
+			follow_pipe(maze, lines, row + 1, col, .South)
+		}
+	}
 }
 
 find_shape :: proc(N, W, S, E: rune) -> rune {
