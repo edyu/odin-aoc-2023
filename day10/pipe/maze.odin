@@ -1,4 +1,4 @@
-package boat
+package pipe
 
 import "core:fmt"
 import "core:log"
@@ -36,6 +36,8 @@ Direction :: enum {
 	West,
 }
 
+Color :: rune
+
 main :: proc() {
 	context.logger = log.create_console_logger()
 	// allocator_storage := make([]u8, 8 * mem.Megabyte)
@@ -50,13 +52,19 @@ main :: proc() {
 
 	defer {
 		if len(track.allocation_map) > 0 {
-			fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
+			fmt.eprintf(
+				"=== %v allocations not freed: ===\n",
+				len(track.allocation_map),
+			)
 			for _, entry in track.allocation_map {
 				fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
 			}
 		}
 		if len(track.bad_free_array) > 0 {
-			fmt.eprintf("=== %v incorrect frees: ===\n", len(track.bad_free_array))
+			fmt.eprintf(
+				"=== %v incorrect frees: ===\n",
+				len(track.bad_free_array),
+			)
 			for entry in track.bad_free_array {
 				fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
 			}
@@ -84,7 +92,13 @@ main :: proc() {
 	// fmt.printf("memory used %v bytes\n", memory_used)
 }
 
-process_file :: proc(filename: string) -> (part1: int, part2: int, err: Maze_Error) {
+process_file :: proc(
+	filename: string,
+) -> (
+	part1: int,
+	part2: int,
+	err: Maze_Error,
+) {
 	data, ok := os.read_entire_file(filename)
 	if !ok {
 		return 0, 0, Unable_To_Read_File{filename = filename}
@@ -96,16 +110,195 @@ process_file :: proc(filename: string) -> (part1: int, part2: int, err: Maze_Err
 	defer delete(lines)
 	maze := find_maze(lines) or_return
 	defer delete(maze)
-	fmt.printf("found starting pipe at %d %d:\n", maze[0].row, maze[0].col)
-
-	for p in maze {
-		fmt.printf("%c@[%d, %d]\n", p.tile, p.row, p.col)
-	}
-	fmt.println("")
+	log.debugf("found starting %v", maze[0])
 
 	part1 = len(maze) / 2
 
+	left, right := color_maze(&maze, &lines)
+	defer delete(left)
+	defer for i in 0 ..< len(lines) do delete(left[i])
+	defer delete(right)
+	defer for i in 0 ..< len(lines) do delete(right[i])
+
+	part2 = find_inside(&left, &right)
+
 	return part1, part2, nil
+}
+
+find_inside :: proc(left, right: ^[][]Color) -> (count: int) {
+	left_count := count_color(left)
+	right_count := count_color(right)
+
+	// not perfect but good enough
+	if is_inside(left) {
+		log.debug("left path is inside")
+		return left_count
+	} else if is_inside(right) {
+		log.debug("right path is inside")
+		return right_count
+	} else if right_count > left_count {
+		return left_count
+	} else {
+		return right_count
+	}
+}
+
+is_inside :: proc(left: ^[][]Color) -> bool {
+	if left[0][0] == 'O' ||
+	   left[len(left) - 1][len(left[0]) - 1] == 'O' ||
+	   left[0][len(left[0]) - 1] == 'O' ||
+	   left[len(left) - 1][0] == 'O' {
+		return true
+	}
+	return false
+}
+
+color_maze :: proc(
+	maze: ^[]Pipe,
+	lines: ^[]string,
+) -> (
+	left: [][]Color,
+	right: [][]Color,
+) {
+	left = make([][]Color, len(lines))
+	right = make([][]Color, len(lines))
+	for i in 0 ..< len(lines) {
+		left[i] = make([]Color, len(lines[0]))
+		right[i] = make([]Color, len(lines[0]))
+		for j in 0 ..< len(lines[0]) {
+			left[i][j] = 'O'
+			right[i][j] = 'O'
+		}
+	}
+	for p in maze {
+		left[p.row][p.col] = 'P'
+		right[p.row][p.col] = 'P'
+	}
+
+	dir: Direction
+	start := maze[0]
+	switch start.tile {
+	case '|':
+		dir = .North
+	case '-':
+		dir = .East
+	case 'L':
+		dir = .West
+	case 'J':
+		dir = .East
+	case '7':
+		dir = .East
+	case 'F':
+		dir = .North
+	}
+
+	for i := 0; i < len(maze); i += 1 {
+		dir = color_pipe(maze[i], &left, &right, dir)
+	}
+	return
+}
+
+color_pipe :: proc(
+	pipe: Pipe,
+	left: ^[][]Color,
+	right: ^[][]Color,
+	dir: Direction,
+) -> Direction {
+	tile := pipe.tile
+	row := pipe.row
+	col := pipe.col
+
+	switch dir {
+	case .North:
+		switch tile {
+		case '|':
+			color_fill(left, row, col - 1)
+			color_fill(right, row, col + 1)
+			return .North
+		case '7':
+			color_fill(right, row, col + 1)
+			color_fill(right, row - 1, col)
+			return .West
+		case 'F':
+			color_fill(left, row, col - 1)
+			color_fill(left, row - 1, col)
+			return .East
+		}
+	case .South:
+		switch tile {
+		case '|':
+			color_fill(left, row, col + 1)
+			color_fill(right, row, col - 1)
+			return .South
+		case 'J':
+			color_fill(left, row, col + 1)
+			color_fill(left, row + 1, col)
+			return .West
+		case 'L':
+			color_fill(right, row, col - 1)
+			color_fill(right, row + 1, col)
+			return .East
+		}
+	case .East:
+		switch tile {
+		case '-':
+			color_fill(left, row - 1, col)
+			color_fill(right, row + 1, col)
+			return .East
+		case 'J':
+			color_fill(right, row + 1, col)
+			color_fill(right, row, col + 1)
+			return .North
+		case '7':
+			color_fill(left, row - 1, col)
+			color_fill(left, row, col + 1)
+			return .South
+		}
+	case .West:
+		switch tile {
+		case '-':
+			color_fill(left, row + 1, col)
+			color_fill(right, row - 1, col)
+			return .West
+		case 'L':
+			color_fill(left, row + 1, col)
+			color_fill(left, row, col - 1)
+			return .North
+		case 'F':
+			color_fill(right, row - 1, col)
+			color_fill(right, row, col - 1)
+			return .South
+		}
+	}
+	return .North
+}
+
+color_fill :: proc(maze: ^[][]Color, row, col: int) {
+	if row < 0 || col < 0 || row >= len(maze) || col >= len(maze[0]) {
+		return
+	}
+	if maze[row][col] == 'P' {
+		return
+	}
+	if maze[row][col] == 'O' {
+		maze[row][col] = 'I'
+		color_fill(maze, row - 1, col)
+		color_fill(maze, row, col + 1)
+		color_fill(maze, row + 1, col)
+		color_fill(maze, row, col - 1)
+	}
+}
+
+count_color :: proc(maze: ^[][]Color) -> (sum: int) {
+	for i in 0 ..< len(maze) {
+		for j in 0 ..< len(maze[i]) {
+			if maze[i][j] == 'I' {
+				sum += 1
+			}
+		}
+	}
+
+	return sum
 }
 
 find_maze :: proc(lines: []string) -> (maze: []Pipe, err: Maze_Error) {
@@ -138,7 +331,7 @@ find_maze :: proc(lines: []string) -> (maze: []Pipe, err: Maze_Error) {
 		E = rune(lines[row][col + 1])
 	}
 	B = find_shape(N, W, S, E)
-	fmt.printf("N=%c, W=%c, S=%c, E=%c\n", N, W, S, E)
+	log.debugf("N=%c, W=%c, S=%c, E=%c", N, W, S, E)
 
 	if B == '.' {
 		return maze, Parse_Error{reason = "can't figure out starting pipe"}
@@ -168,7 +361,12 @@ find_maze :: proc(lines: []string) -> (maze: []Pipe, err: Maze_Error) {
 	}
 }
 
-follow_pipe :: proc(maze: ^[dynamic]Pipe, lines: []string, row, col: int, dir: Direction) {
+follow_pipe :: proc(
+	maze: ^[dynamic]Pipe,
+	lines: []string,
+	row, col: int,
+	dir: Direction,
+) {
 	tile := rune(lines[row][col])
 	if tile == 'S' do return
 
@@ -242,4 +440,3 @@ find_shape :: proc(N, W, S, E: rune) -> rune {
 
 	return '.'
 }
-
