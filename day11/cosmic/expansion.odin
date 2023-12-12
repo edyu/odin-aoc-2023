@@ -58,13 +58,15 @@ main :: proc() {
 	arguments := os.args[1:]
 
 	if len(arguments) < 1 {
-		fmt.printf("Usage: %s <file>\n", os.args[0])
+		fmt.printf("Usage: %s <file> [<expansion>]\n", os.args[0])
 		os.exit(1)
 	}
 	filename := arguments[0]
+	expansion := 1000000
+	if len(arguments) > 1 do expansion = strconv.atoi(arguments[1])
 
 	time_start := time.tick_now()
-	part1, part2, error := process_file(filename)
+	part1, part2, error := process_file(filename, expansion)
 	time_took := time.tick_since(time_start)
 	// memory_used := arena.peak_used
 	if error != nil {
@@ -76,7 +78,15 @@ main :: proc() {
 	// fmt.printf("memory used %v bytes\n", memory_used)
 }
 
-process_file :: proc(filename: string) -> (part1: int, part2: int, err: Universe_Error) {
+process_file :: proc(
+	filename: string,
+	expansion: int,
+) -> (
+	part1: int,
+	part2: int,
+	err: Universe_Error,
+) {
+	fmt.println("expansion is", expansion)
 	data, ok := os.read_entire_file(filename)
 	if !ok {
 		return 0, 0, Unable_To_Read_File{filename = filename}
@@ -88,6 +98,9 @@ process_file :: proc(filename: string) -> (part1: int, part2: int, err: Universe
 	defer delete(lines)
 	galaxies := parse_universe(lines) or_return
 	defer delete(galaxies)
+	galaxies2 := parse_universe(lines, expansion) or_return
+	defer delete(galaxies2)
+	assert(len(galaxies) == len(galaxies2))
 
 	range := make([]int, len(galaxies))
 	defer delete(range)
@@ -98,8 +111,11 @@ process_file :: proc(filename: string) -> (part1: int, part2: int, err: Universe
 	defer for m in matches {
 		delete(m)
 	}
+	fmt.println("found", len(matches), "matches")
+
 	for m in matches {
 		part1 += calculate_distance(galaxies[m[0]], galaxies[m[1]])
+		part2 += calculate_distance(galaxies2[m[0]], galaxies2[m[1]])
 	}
 
 	return part1, part2, nil
@@ -109,13 +125,11 @@ calculate_distance :: proc(a, b: Galaxy) -> int {
 	return max(a.row, b.row) - min(a.row, b.row) + max(a.col, b.col) - min(a.col, b.col)
 }
 
-parse_universe :: proc(lines: []string) -> (galaxies: []Galaxy, err: Universe_Error) {
+parse_universe :: proc(lines: []string, e: int = 2) -> (galaxies: []Galaxy, err: Universe_Error) {
 	g: [dynamic]Galaxy
-	fmt.printf("found %d lines\n", len(lines))
 	r := 0
 	for i in 0 ..< len(lines) {
 		if lines[i] == "" do break
-		fmt.printf("found %d chars\n", len(lines[i]))
 		h_found := false
 		c := 0
 		for j in 0 ..< len(lines[0]) {
@@ -132,16 +146,16 @@ parse_universe :: proc(lines: []string) -> (galaxies: []Galaxy, err: Universe_Er
 				}
 			}
 			if !v_found {
-				fmt.println("expanding vertically:", j)
+				c += e
+			} else {
 				c += 1
 			}
-			c += 1
 		}
 		if !h_found {
-			fmt.println("expanding horizontally:", i)
+			r += e
+		} else {
 			r += 1
 		}
-		r += 1
 	}
 
 	return g[:], nil
