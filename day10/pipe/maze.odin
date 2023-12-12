@@ -52,19 +52,13 @@ main :: proc() {
 
 	defer {
 		if len(track.allocation_map) > 0 {
-			fmt.eprintf(
-				"=== %v allocations not freed: ===\n",
-				len(track.allocation_map),
-			)
+			fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
 			for _, entry in track.allocation_map {
 				fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
 			}
 		}
 		if len(track.bad_free_array) > 0 {
-			fmt.eprintf(
-				"=== %v incorrect frees: ===\n",
-				len(track.bad_free_array),
-			)
+			fmt.eprintf("=== %v incorrect frees: ===\n", len(track.bad_free_array))
 			for entry in track.bad_free_array {
 				fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
 			}
@@ -74,7 +68,7 @@ main :: proc() {
 	arguments := os.args[1:]
 
 	if len(arguments) < 1 {
-		fmt.printf("Usage: mirage <file>\n")
+		fmt.printf("Usage: pipe <file>\n")
 		os.exit(1)
 	}
 	filename := arguments[0]
@@ -92,13 +86,7 @@ main :: proc() {
 	// fmt.printf("memory used %v bytes\n", memory_used)
 }
 
-process_file :: proc(
-	filename: string,
-) -> (
-	part1: int,
-	part2: int,
-	err: Maze_Error,
-) {
+process_file :: proc(filename: string) -> (part1: int, part2: int, err: Maze_Error) {
 	data, ok := os.read_entire_file(filename)
 	if !ok {
 		return 0, 0, Unable_To_Read_File{filename = filename}
@@ -129,37 +117,35 @@ find_inside :: proc(left, right: ^[][]Color) -> (count: int) {
 	left_count := count_color(left)
 	right_count := count_color(right)
 
-	// not perfect but good enough
 	if is_inside(left) {
 		log.debug("left path is inside")
 		return left_count
-	} else if is_inside(right) {
-		log.debug("right path is inside")
-		return right_count
-	} else if right_count > left_count {
-		return left_count
 	} else {
+		log.debug("right path is inside")
 		return right_count
 	}
 }
 
-is_inside :: proc(left: ^[][]Color) -> bool {
-	if left[0][0] == 'O' ||
-	   left[len(left) - 1][len(left[0]) - 1] == 'O' ||
-	   left[0][len(left[0]) - 1] == 'O' ||
-	   left[len(left) - 1][0] == 'O' {
-		return true
+// for a closed loop, depending on the direction to traverse
+// one of the paths must be inside
+is_inside :: proc(colors: ^[][]Color) -> bool {
+	for i in 0 ..< len(colors) {
+		if colors[i][0] == 'O' || colors[i][len(colors[0]) - 1] == 'O' {
+			return true
+		}
 	}
+	for j in 0 ..< len(colors[0]) {
+		if colors[0][j] == 'O' || colors[len(colors) - 1][j] == 'O' {
+			return true
+		}
+	}
+
+
 	return false
 }
 
-color_maze :: proc(
-	maze: ^[]Pipe,
-	lines: ^[]string,
-) -> (
-	left: [][]Color,
-	right: [][]Color,
-) {
+// this works because the pipe is a closed loop
+color_maze :: proc(maze: ^[]Pipe, lines: ^[]string) -> (left: [][]Color, right: [][]Color) {
 	left = make([][]Color, len(lines))
 	right = make([][]Color, len(lines))
 	for i in 0 ..< len(lines) {
@@ -198,12 +184,8 @@ color_maze :: proc(
 	return
 }
 
-color_pipe :: proc(
-	pipe: Pipe,
-	left: ^[][]Color,
-	right: ^[][]Color,
-	dir: Direction,
-) -> Direction {
+// a stupidly easy implementation of 4-way color fill
+color_pipe :: proc(pipe: Pipe, left: ^[][]Color, right: ^[][]Color, dir: Direction) -> Direction {
 	tile := pipe.tile
 	row := pipe.row
 	col := pipe.col
@@ -361,12 +343,7 @@ find_maze :: proc(lines: []string) -> (maze: []Pipe, err: Maze_Error) {
 	}
 }
 
-follow_pipe :: proc(
-	maze: ^[dynamic]Pipe,
-	lines: []string,
-	row, col: int,
-	dir: Direction,
-) {
+follow_pipe :: proc(maze: ^[dynamic]Pipe, lines: []string, row, col: int, dir: Direction) {
 	tile := rune(lines[row][col])
 	if tile == 'S' do return
 
@@ -440,3 +417,4 @@ find_shape :: proc(N, W, S, E: rune) -> rune {
 
 	return '.'
 }
+
