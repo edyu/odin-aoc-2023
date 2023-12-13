@@ -109,7 +109,6 @@ match_record :: proc(hotspring: Hotspring) -> (arrange: int, err: Hotspring_Erro
 	records := make([dynamic]string, 0, len(hotspring.groups))
 	defer delete(records)
 	for i := 0; i < len(hotspring.record); i += 1 {
-		if len(records) >= len(hotspring.groups) do break
 		if hotspring.record[i] == '.' do continue
 		j := i + 1
 		for ; j < len(hotspring.record); j += 1 {
@@ -118,7 +117,7 @@ match_record :: proc(hotspring: Hotspring) -> (arrange: int, err: Hotspring_Erro
 		append(&records, hotspring.record[i:j])
 		i = j
 	}
-	return find_arrangements(records[:], hotspring.groups), nil
+	return find_arrangements(hotspring.record, records[:], hotspring.groups), nil
 }
 
 all_of :: proc(s: string, r: rune) -> bool {
@@ -128,37 +127,113 @@ all_of :: proc(s: string, r: rune) -> bool {
 	return true
 }
 
-find_arrangements :: proc(records: []string, groups: []int) -> int {
-	if len(records) == len(groups) {
-		sum := 1
-		for i in 0 ..< len(records) {
-			if len(records[i]) != groups[i] {
-				sum *= num_chosen(len(records[i]), groups[i])
+find_arrangements :: proc(pattern: string, records: []string, groups: []int) -> (sum: int) {
+	// if len(groups) == 0 {
+	// 	return 1
+	// }
+	// if len(records) == len(groups) {
+	// 	use_math: = true
+	// 	for i in 0..<len(records) {
+	// 		if len(records[i]) < groups[i] {
+	// 			use_math = false
+	// 		}
+	// 	}
+	// 	if use_math {
+	// 		sum = 1
+	// 		fmt.println("chosen", records, groups)
+	// 		for i in 0 ..< len(records) {
+	// 			if len(records[i]) != groups[i] {
+	// 				sum *= num_chosen(len(records[i]), groups[i])
+	// 			}
+	// 		}
+	// 		return sum
+	// 	}
+	// }
+	// if len(records[0]) == groups[0] {
+	// 	// remove first part of pattern
+	// 	return find_arrangements(pattern, records[1:], groups[1:])
+	// }
+	// if len(records[len(records) - 1]) == groups[len(groups) - 1] {
+	// 	// remove last part of pattern
+	// 	return find_arrangements(pattern, records[0:len(records) - 1], groups[0:len(groups) - 1])
+	// }
+	// if len(records) == 1 {
+	// 	if all_of(records[0], '?') {
+	// 		return num_chosen(len(records[0]), math.sum(groups) + len(groups) - 1)
+	// 	} else {
+	// 		sum = 1
+	// 		new_records := generate_possible_records(groups, len(records[0]))
+	// 		defer delete(new_records)
+	// 		defer for r in new_records {
+	// 			delete(r)
+	// 		}
+	// 		fmt.printf("found %d possibilities\n", len(new_records))
+	// 		subsum := 0
+	// 		for r in new_records {
+	// 			if fit_record(records[0], r) {
+	// 				subsum += 1
+	// 			}
+	// 		}
+	// 		if subsum != 0 {
+	// 			sum *= subsum
+	// 		}
+
+	// 		return sum
+	// 	}
+ // 	}
+
+	sum = 1
+	new_records := generate_possible_records(groups, len(pattern))
+	defer delete(new_records)
+	defer for r in new_records {
+		delete(r)
+	}
+	fmt.printf("found %d possibilities\n", len(new_records))
+	subsum := 0
+	for r in new_records {
+		if fit_record(pattern, r) {
+			subsum += 1
+		}
+	}
+	if subsum != 0 {
+		sum *= subsum
+	}
+
+	fmt.println(new_records)
+	return sum
+}
+
+fit_record :: proc(pattern: string, record: string) -> bool {
+	assert(len(pattern) == len(record))
+	for i in 0 ..< len(pattern) {
+		if pattern[i] == record[i] do continue
+		if pattern[i] == '#' do return false
+		if pattern[i] == '.' do return false
+	}
+	return true
+}
+
+generate_possible_records :: proc(groups: []int, length: int) -> (records: [dynamic]string) {
+	suffix_base := math.sum(groups) + len(groups) - 1
+
+	if suffix_base == length {
+		return find_possible_records(groups, length)
+	} else {
+		for i in 0 ..= length - suffix_base {
+			dots := expand_dots(i)
+			defer delete(dots)
+			suffices := find_possible_records(groups, length - i)
+			defer delete(suffices)
+			for s in suffices {
+				record := strings.concatenate([]string{dots, s})
+				append(&records, record)
+			}
+			defer for s in suffices {
+				delete(s)
 			}
 		}
-		return sum
+		return records
 	}
-	if len(records[0]) == groups[0] {
-		return find_arrangements(records[1:], groups[1:])
-	}
-	if len(records[len(records) - 1]) == groups[len(groups) - 1] {
-		return find_arrangements(records[0:len(records) - 1], groups[0:len(groups) - 1])
-	}
-	if len(records) == 1 {
-		if all_of(records[0], '?') {
-			return num_chosen(len(records[0]), math.sum(groups) + len(groups) - 1)
-		} else {
-			new_records := find_possible_records(groups, len(records[0]))
-			defer delete(new_records)
-			defer for r in new_records {
-				delete(r)
-			}
-			fmt.printf("found %d possibilities\n", len(new_records))
-			fmt.println(new_records)
-		}
-	}
-	fmt.println("not implemented", records, groups)
-	return 0
 }
 
 find_possible_records :: proc(groups: []int, length: int) -> (records: [dynamic]string) {
@@ -208,6 +283,7 @@ expand_dots :: proc(length: int) -> string {
 }
 
 num_chosen :: proc(m: int, n: int) -> int {
+	fmt.println(m, "choose", n)
 	return math.factorial(m) / (math.factorial(n) * math.factorial(m - n))
 }
 
@@ -223,7 +299,7 @@ parse_hotsprings :: proc(lines: []string) -> (hotsprings: []Hotspring, err: Hots
 		string_groups := strings.split(fields[1], ",") or_return
 		defer delete(string_groups)
 		hotspring := Hotspring {
-			record = fields[0],
+			record = strings.trim(fields[0], ".")
 		}
 		groups := make([]int, len(string_groups))
 		for j in 0 ..< len(string_groups) {
