@@ -148,14 +148,59 @@ find_arrangements :: proc(records: []string, groups: []int) -> int {
 		if all_of(records[0], '?') {
 			return num_chosen(len(records[0]), math.sum(groups) + len(groups) - 1)
 		} else {
+			new_records := find_possible_records(groups, len(records[0]))
+			defer delete(new_records)
+			defer for r in new_records {
+				delete(r)
+			}
+			fmt.printf("found %d possibilities\n", len(new_records))
+			fmt.println(new_records)
 		}
 	}
 	fmt.println("not implemented", records, groups)
 	return 0
 }
 
-expand_dot :: proc(length: int) -> string {
-	dots := strings.builder_make(length)
+find_possible_records :: proc(groups: []int, length: int) -> (records: [dynamic]string) {
+	record := strings.builder_make()
+	for _ in 0 ..< groups[0] {
+		strings.write_rune(&record, '#')
+	}
+	if len(groups) == 1 {
+		for _ in 0 ..< length - groups[0] {
+			strings.write_rune(&record, '.')
+		}
+		new_record := strings.to_string(record)
+		append(&records, new_record)
+		return records
+	} else {
+		strings.write_rune(&record, '.')
+		suffix_base := math.sum(groups[1:]) + len(groups[1:]) - 1
+		num_dots := length - (groups[0] + 1) - suffix_base
+		defer strings.builder_destroy(&record)
+		for i in 0 ..= num_dots {
+			record_str := strings.to_string(record)
+			dots := expand_dots(i)
+			defer delete(dots)
+			prefix := strings.concatenate([]string{record_str, dots})
+			defer delete(prefix)
+			suffices := find_possible_records(groups[1:], length - (groups[0] + 1) - i)
+			defer delete(suffices)
+			for s in suffices {
+				new_record := strings.concatenate([]string{prefix, s})
+				append(&records, new_record)
+			}
+			defer for s in suffices {
+				delete(s)
+			}
+		}
+	}
+	return records
+}
+
+expand_dots :: proc(length: int) -> string {
+	if length == 0 do return ""
+	dots := strings.builder_make()
 	for _ in 0 ..< length {
 		strings.write_rune(&dots, '.')
 	}
