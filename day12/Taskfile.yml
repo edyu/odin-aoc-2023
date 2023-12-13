@@ -1,0 +1,29 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task: run
+
+  run:
+    deps:
+      - build
+    cmds:
+      - bin/hotsprings {{.CLI_ARGS}}
+    aliases:
+      - r
+    silent: true
+    method: none
+
+  build:
+    cmds:
+      - odin build hotsprings -o:speed -out=bin/hotsprings
+    aliases:
+      - b
+    silent: true
+    sources:
+      - './hotsprings/**/*.odin'
+    generates:
+      - bin/hotsprings
+
+interval: 250ms
