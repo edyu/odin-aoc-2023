@@ -96,31 +96,44 @@ process_file :: proc(filename: string) -> (part1: int, part2: int, err: Mirror_E
 		h, v := find_reflection(p)
 		fmt.printf("h: %d, v: %d\n", h, v)
 		part1 += 100 * h + v
+
+		h2, v2 := find_reflection_repaired(p, h, v)
+		fmt.printf("h2: %d, v2: %d\n", h2, v2)
+		part2 += 100 * h2 + v2
 	}
 
 	return part1, part2, nil
 }
 
-compare_column :: proc(pattern: Pattern, a, b: int) -> bool {
+compare_column :: proc(pattern: Pattern, a, b: int) -> (diff: int) {
 	for i := 0; i < len(pattern.lines); i += 1 {
 		if pattern.lines[i][a] != pattern.lines[i][b] {
-			return false
+			diff += 1
 		}
 	}
-	return true
+	return diff
 }
 
-find_reflection :: proc(pattern: Pattern) -> (h, v: int) {
+compare_row :: proc(pattern: Pattern, a, b: int) -> (diff: int) {
+	for i := 0; i < len(pattern.lines[a]); i += 1 {
+		if pattern.lines[a][i] != pattern.lines[b][i] {
+			diff += 1
+		}
+	}
+	return diff
+}
+
+find_reflection_repaired :: proc(pattern: Pattern, old_h, old_v: int) -> (h, v: int) {
 	p := 0
 	for i := 1; i < len(pattern.lines); i += 1 {
 		fmt.println("comparing:", p, i)
-		if pattern.lines[i] == pattern.lines[p] {
+		if compare_row(pattern, i, p) == 0 {
 			fmt.println("maybe:", p, i)
 			n := min(len(pattern.lines) - i, p + 1)
 			fmt.println("range:", n)
 			checked := true
 			for k in 1 ..< n {
-				if pattern.lines[p - k] != pattern.lines[i + k] {
+				if compare_row(pattern, p - k, i + k) != 0 {
 					fmt.println(pattern.lines[p - k], pattern.lines[i + k])
 					checked = false
 					break
@@ -138,11 +151,53 @@ find_reflection :: proc(pattern: Pattern) -> (h, v: int) {
 	}
 	p = 0
 	for j := 1; j < len(pattern.lines[0]); j += 1 {
-		if compare_column(pattern, p, j) {
+		if compare_column(pattern, p, j) == 0 {
 			n := min(len(pattern.lines[0]) - j, p + 1)
 			checked := true
 			for k in 1 ..< n {
-				if !compare_column(pattern, p - k, j + k) {
+				if compare_column(pattern, p - k, j + k) != 0 {
+					checked = false
+					break
+				}
+			}
+			if checked {
+				v = p + 1
+				break
+			}
+		}
+		p = j
+	}
+
+	return h, v
+}
+
+find_reflection :: proc(pattern: Pattern) -> (h, v: int) {
+	p := 0
+	for i := 1; i < len(pattern.lines); i += 1 {
+		if pattern.lines[i] == pattern.lines[p] {
+			n := min(len(pattern.lines) - i, p + 1)
+			checked := true
+			for k in 1 ..< n {
+				if pattern.lines[p - k] != pattern.lines[i + k] {
+					fmt.println(pattern.lines[p - k], pattern.lines[i + k])
+					checked = false
+					break
+				}
+			}
+			if checked {
+				h = p + 1
+				break
+			}
+		}
+		p = i
+	}
+	p = 0
+	for j := 1; j < len(pattern.lines[0]); j += 1 {
+		if compare_column(pattern, p, j) == 0 {
+			n := min(len(pattern.lines[0]) - j, p + 1)
+			checked := true
+			for k in 1 ..< n {
+				if compare_column(pattern, p - k, j + k) != 0 {
 					checked = false
 					break
 				}
