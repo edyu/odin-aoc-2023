@@ -30,6 +30,12 @@ Hotspring :: struct {
 	groups: []int,
 }
 
+State :: struct {
+	record_index: int,
+	groups_index: int,
+	group_num: int,
+}
+
 main :: proc() {
 	context.logger = log.create_console_logger()
 	// allocator_storage := make([]u8, 8 * mem.Megabyte)
@@ -96,28 +102,49 @@ process_file :: proc(filename: string) -> (part1: int, part2: int, err: Hotsprin
 	}
 
 	for h in hotsprings {
-		fmt.println(h)
 		sum := match_record(h) or_return
-		fmt.printf("%v has %d arrangements\n", h, sum)
 		part1 += sum
+	}
+
+	hotsprings2 := parse_hotsprings(lines, false) or_return
+	defer delete(hotsprings2)
+	defer for h in hotsprings2 {
+		delete(h.groups)
+	}
+
+	for h in hotsprings2 {
+		sum := match_record2(h) or_return
+		fmt.printf("%v has %d arrangements\n", h, sum)
+		part2 += sum
 	}
 
 	return part1, part2, nil
 }
 
 match_record :: proc(hotspring: Hotspring) -> (arrange: int, err: Hotspring_Error) {
-	records := make([dynamic]string, 0, len(hotspring.groups))
-	defer delete(records)
-	for i := 0; i < len(hotspring.record); i += 1 {
-		if hotspring.record[i] == '.' do continue
-		j := i + 1
-		for ; j < len(hotspring.record); j += 1 {
-			if hotspring.record[j] == '.' do break
+	return find_arrangements(hotspring.record, hotspring.groups), nil
+}
+
+states: map[State]int
+
+match_record2 :: proc(hotspring: Hotspring) -> (arrange: int, err: Hotspring_Error) {
+	states = make(map[State]int)
+	defer delete(states)
+
+	record := strings.join([]string { hotspring.record, hotspring.record,
+		hotspring.record, hotspring.record, hotspring.record}, "?")
+	defer delete(record)
+	groups := make([]int, len(hotspring.groups) * 5)
+	defer delete(groups)
+	for i in 0 ..< 5 {
+		for j in 0..<len(hotspring.groups) {
+			groups[i * len(hotspring.groups) + j] = hotspring.groups[j]			
 		}
-		append(&records, hotspring.record[i:j])
-		i = j
 	}
-	return find_arrangements(hotspring.record, records[:], hotspring.groups), nil
+	new_record :=  strings.trim(record, ".")
+	fmt.println("record:", new_record)
+	fmt.println("groups:", groups)
+	return count_arrangements(new_record, groups, 0, 0, 0), nil
 }
 
 all_of :: proc(s: string, r: rune) -> bool {
@@ -127,80 +154,72 @@ all_of :: proc(s: string, r: rune) -> bool {
 	return true
 }
 
-find_arrangements :: proc(pattern: string, records: []string, groups: []int) -> (sum: int) {
-	// if len(groups) == 0 {
-	// 	return 1
-	// }
-	// if len(records) == len(groups) {
-	// 	use_math: = true
-	// 	for i in 0..<len(records) {
-	// 		if len(records[i]) < groups[i] {
-	// 			use_math = false
-	// 		}
-	// 	}
-	// 	if use_math {
-	// 		sum = 1
-	// 		fmt.println("chosen", records, groups)
-	// 		for i in 0 ..< len(records) {
-	// 			if len(records[i]) != groups[i] {
-	// 				sum *= num_chosen(len(records[i]), groups[i])
-	// 			}
-	// 		}
-	// 		return sum
-	// 	}
-	// }
-	// if len(records[0]) == groups[0] {
-	// 	// remove first part of pattern
-	// 	return find_arrangements(pattern, records[1:], groups[1:])
-	// }
-	// if len(records[len(records) - 1]) == groups[len(groups) - 1] {
-	// 	// remove last part of pattern
-	// 	return find_arrangements(pattern, records[0:len(records) - 1], groups[0:len(groups) - 1])
-	// }
-	// if len(records) == 1 {
-	// 	if all_of(records[0], '?') {
-	// 		return num_chosen(len(records[0]), math.sum(groups) + len(groups) - 1)
-	// 	} else {
-	// 		sum = 1
-	// 		new_records := generate_possible_records(groups, len(records[0]))
-	// 		defer delete(new_records)
-	// 		defer for r in new_records {
-	// 			delete(r)
-	// 		}
-	// 		fmt.printf("found %d possibilities\n", len(new_records))
-	// 		subsum := 0
-	// 		for r in new_records {
-	// 			if fit_record(records[0], r) {
-	// 				subsum += 1
-	// 			}
-	// 		}
-	// 		if subsum != 0 {
-	// 			sum *= subsum
-	// 		}
+// record_index indexes into the pattern
+// groups_index indexes into the groups
+// group_num is the number of '#' we have matched in the current group
+count_arrangements :: proc(pattern: string, groups: []int, record_index, groups_index, group_num: int) -> (sum: int) {
+	// check cache
+    state := State{record_index, groups_index, group_num}
+    cache, exists := states[state]
+	if exists do return cache
 
-	// 		return sum
-	// 	}
- // 	}
-
-	sum = 1
-	new_records := generate_possible_records(groups, len(pattern))
-	defer delete(new_records)
-	defer for r in new_records {
-		delete(r)
-	}
-	fmt.printf("found %d possibilities\n", len(new_records))
-	subsum := 0
-	for r in new_records {
-		if fit_record(pattern, r) {
-			subsum += 1
+	// all groups consumed
+    if groups_index == len(groups) {
+		if group_num != 0 || strings.contains_rune(pattern[record_index:], '#') {
+			// we still have more bad groups in pattern; bad match
+			return 0
+		} else {
+			return 1
 		}
 	}
-	if subsum != 0 {
-		sum *= subsum
+
+    if group_num > groups[groups_index] {
+		return 0
 	}
 
-	fmt.println(new_records)
-	return sum
+	// pattern consumed
+    if record_index == len(pattern) {
+		// all consumed
+		if (groups_index == len(groups) && group_num == 0) || (groups_index == len(groups) - 1 && group_num == groups[groups_index]) {
+			return 1
+		} else {
+			// not done; bad match 
+			return 0
+		}
+	}
+
+    switch pattern[record_index] {
+    case '#':
+		// advance pattern and advance the number of '#' matched in group
+        sum = count_arrangements(pattern, groups, record_index + 1, groups_index, group_num + 1)
+    case '.':
+        if group_num == 0 {
+			// advance to next character in pattern
+            sum = count_arrangements(pattern, groups, record_index + 1, groups_index, 0)
+		} else if group_num == groups[groups_index] {
+			// everything matched; work on next group
+            sum = count_arrangements(pattern, groups, record_index + 1, groups_index + 1, 0)
+        }
+    case '?':
+        if group_num == 0 {
+			// pretend '?' is '#' or '.'
+			// add the counts together
+            sum = count_arrangements(pattern, groups, record_index + 1, groups_index, 0) + count_arrangements(pattern, groups, record_index + 1, groups_index, 1)
+		} else {
+            if group_num == groups[groups_index] {
+				// already matched the current group
+                sum = count_arrangements(pattern, groups, record_index + 1, groups_index + 1, 0)
+            }
+			// '?' is '#'
+            sum += count_arrangements(pattern, groups, record_index + 1, groups_index, group_num + 1)
+        }
+    }
+    states[state] = sum
+    return sum
+}
+
+find_arrangements :: proc(pattern: string, groups: []int) -> (sum: int) {
+	return generate_possible_records(pattern, groups, len(pattern))
 }
 
 fit_record :: proc(pattern: string, record: string) -> bool {
@@ -213,11 +232,18 @@ fit_record :: proc(pattern: string, record: string) -> bool {
 	return true
 }
 
-generate_possible_records :: proc(groups: []int, length: int) -> (records: [dynamic]string) {
+generate_possible_records :: proc(pattern: string, groups: []int, length: int) -> (count: int) {
 	suffix_base := math.sum(groups) + len(groups) - 1
 
 	if suffix_base == length {
-		return find_possible_records(groups, length)
+		records := find_possible_records(groups, length)
+		defer delete(records)
+		for r in records {
+			if fit_record(pattern, r) do count += 1
+		}
+		defer for r in records {
+			delete(r)
+		}
 	} else {
 		for i in 0 ..= length - suffix_base {
 			dots := expand_dots(i)
@@ -226,14 +252,16 @@ generate_possible_records :: proc(groups: []int, length: int) -> (records: [dyna
 			defer delete(suffices)
 			for s in suffices {
 				record := strings.concatenate([]string{dots, s})
-				append(&records, record)
+				defer delete(record)
+				if	fit_record(pattern, record) do count += 1
 			}
 			defer for s in suffices {
 				delete(s)
 			}
 		}
-		return records
 	}
+
+	return count
 }
 
 find_possible_records :: proc(groups: []int, length: int) -> (records: [dynamic]string) {
@@ -283,14 +311,11 @@ expand_dots :: proc(length: int) -> string {
 }
 
 num_chosen :: proc(m: int, n: int) -> int {
-	fmt.println(m, "choose", n)
 	return math.factorial(m) / (math.factorial(n) * math.factorial(m - n))
 }
 
-parse_hotsprings :: proc(lines: []string) -> (hotsprings: []Hotspring, err: Hotspring_Error) {
+parse_hotsprings :: proc(lines: []string, trim: bool = true) -> (hotsprings: []Hotspring, err: Hotspring_Error) {
 	hotsprings = make([]Hotspring, len(lines))
-
-	fmt.printf("total of %d lines\n", len(lines))
 
 	for line, i in lines {
 		if line == "" do break
@@ -300,6 +325,8 @@ parse_hotsprings :: proc(lines: []string) -> (hotsprings: []Hotspring, err: Hots
 		defer delete(string_groups)
 		hotspring := Hotspring {
 			record = strings.trim(fields[0], ".")
+		} if trim else Hotspring {
+			record = fields[0]
 		}
 		groups := make([]int, len(string_groups))
 		for j in 0 ..< len(string_groups) {
