@@ -1,0 +1,29 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task: run
+
+  run:
+    deps:
+      - build
+    cmds:
+      - bin/point {{.CLI_ARGS}}
+    aliases:
+      - r
+    silent: true
+    method: none
+
+  build:
+    cmds:
+      - odin build point -o:speed -out=bin/point
+    aliases:
+      - b
+    silent: true
+    sources:
+      - './point/**/*.odin'
+    generates:
+      - bin/point
+
+interval: 250ms
