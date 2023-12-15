@@ -25,6 +25,10 @@ Unable_To_Read_File :: struct {
 	error:    os.Errno,
 }
 
+Platform :: struct {
+	mirror: [][]u8,
+}
+
 main :: proc() {
 	context.logger = log.create_console_logger()
 	// allocator_storage := make([]u8, 8 * mem.Megabyte)
@@ -54,14 +58,17 @@ main :: proc() {
 	}
 	arguments := os.args[1:]
 
+	cycles := 1_000_000_000
 	if len(arguments) < 1 {
-		fmt.printf("Usage: %s <file>\n", os.args[0])
+		fmt.printf("Usage: %s <file> [<cycles>]\n", os.args[0])
 		os.exit(1)
 	}
 	filename := arguments[0]
 
+	if len(arguments) > 1 do cycles = strconv.atoi(arguments[1])
+
 	time_start := time.tick_now()
-	part1, part2, error := process_file(filename)
+	part1, part2, error := process_file(filename, cycles)
 	time_took := time.tick_since(time_start)
 	// memory_used := arena.peak_used
 	if error != nil {
@@ -73,7 +80,7 @@ main :: proc() {
 	// fmt.printf("memory used %v bytes\n", memory_used)
 }
 
-process_file :: proc(filename: string) -> (part1: int, part2: int, err: Dish_Error) {
+process_file :: proc(filename: string, cycles: int) -> (part1: int, part2: int, err: Dish_Error) {
 	data, ok := os.read_entire_file(filename)
 	if !ok {
 		return 0, 0, Unable_To_Read_File{filename = filename}
@@ -84,21 +91,149 @@ process_file :: proc(filename: string) -> (part1: int, part2: int, err: Dish_Err
 	lines := strings.split_lines(it)
 	defer delete(lines)
 	if lines[len(lines) - 1] == "" do lines = lines[0:len(lines) - 1]
+
 	for i in 0 ..< len(lines[0]) {
 		part1 += calculate_load(lines, i)
 	}
-	// part1 += calculate_load(lines, 0)
+	fmt.println("part1=", part1)
+
+	platform := parse_platform(lines)
+	defer delete(platform.mirror)
+	defer for r in platform.mirror do delete(r)
+	// spin_cycle(platform, 1_000_000_000)
+	spin_cycle(platform, cycles)
+
+	// print_platform(platform)
+
+	part2 = calculate_mirror_load(platform)
 
 	return part1, part2, nil
 }
 
+print_platform :: proc(platform: Platform) {
+	for i in 0 ..< len(platform.mirror) {
+		for j in 0 ..< len(platform.mirror[0]) {
+			fmt.printf("%c", platform.mirror[i][j])
+		}
+		fmt.println("")
+	}
+	fmt.println("")
+}
+
+spin_cycle :: proc(platform: Platform, cycle: int) {
+	for c in 0 ..< cycle {
+		spin_cycle_north(platform)
+		spin_cycle_west(platform)
+		spin_cycle_south(platform)
+		spin_cycle_east(platform)
+	}
+}
+
+spin_cycle_north :: proc(platform: Platform) {
+	for col in 0 ..< len(platform.mirror[0]) {
+		for i := 0; i < len(platform.mirror); i += 1 {
+			if platform.mirror[i][col] == '.' {
+				for j := i + 1; j < len(platform.mirror); j += 1 {
+					if platform.mirror[j][col] == '#' {
+						break
+					} else if platform.mirror[j][col] == 'O' {
+						platform.mirror[i][col] = 'O'
+						platform.mirror[j][col] = '.'
+						break
+					}
+				}
+			}
+		}
+	}
+}
+
+spin_cycle_south :: proc(platform: Platform) {
+	for col in 0 ..< len(platform.mirror[0]) {
+		for i := len(platform.mirror) - 1; i >= 0; i -= 1 {
+			if platform.mirror[i][col] == '.' {
+				for j := i - 1; j >= 0; j -= 1 {
+					if platform.mirror[j][col] == '#' {
+						break
+					} else if platform.mirror[j][col] == 'O' {
+						platform.mirror[i][col] = 'O'
+						platform.mirror[j][col] = '.'
+						break
+					}
+				}
+			}
+		}
+	}
+}
+
+spin_cycle_west :: proc(platform: Platform) {
+	for row in 0 ..< len(platform.mirror) {
+		for i := 0; i < len(platform.mirror[0]); i += 1 {
+			if platform.mirror[row][i] == '.' {
+				for j := i + 1; j < len(platform.mirror[0]); j += 1 {
+					if platform.mirror[row][j] == '#' {
+						break
+					} else if platform.mirror[row][j] == 'O' {
+						platform.mirror[row][i] = 'O'
+						platform.mirror[row][j] = '.'
+						break
+					}
+				}
+			}
+		}
+	}
+}
+
+spin_cycle_east :: proc(platform: Platform) {
+	for row in 0 ..< len(platform.mirror) {
+		for i := len(platform.mirror[0]) - 1; i >= 0; i -= 1 {
+			if platform.mirror[row][i] == '.' {
+				for j := i - 1; j >= 0; j -= 1 {
+					if platform.mirror[row][j] == '#' {
+						break
+					} else if platform.mirror[row][j] == 'O' {
+						platform.mirror[row][i] = 'O'
+						platform.mirror[row][j] = '.'
+						break
+					}
+				}
+			}
+		}
+	}
+}
+
+parse_platform :: proc(lines: []string) -> (platform: Platform) {
+	platform.mirror = make([][]u8, len(lines))
+
+	for i := 0; i < len(lines); i += 1 {
+		line := make([]u8, len(lines[0]))
+		for j := 0; j < len(lines[i]); j += 1 {
+			line[j] = lines[i][j]
+		}
+		platform.mirror[i] = line
+	}
+
+	return platform
+}
+
+calculate_mirror_load :: proc(platform: Platform) -> (load: int) {
+	for col in 0 ..< len(platform.mirror[0]) {
+		col_load := 0
+		for i := 0; i < len(platform.mirror); i += 1 {
+			weight := len(platform.mirror) - i
+			if platform.mirror[i][col] == 'O' {
+				col_load += weight
+			}
+		}
+		load += col_load
+	}
+
+	return load
+}
+
 calculate_load :: proc(lines: []string, col: int) -> (load: int) {
-	fmt.println("calculate load for column", col)
 	next := 0
 	for i := 0; i < len(lines); i += 1 {
 		weight := len(lines) - next
-		fmt.println("weight is", weight, "next is", next)
-		fmt.printf("checking row[%d]=%c\n", i, lines[i][col])
 		switch lines[i][col] {
 		case '#':
 			next = i + 1
@@ -108,7 +243,6 @@ calculate_load :: proc(lines: []string, col: int) -> (load: int) {
 		case '.':
 			continue
 		}
-		fmt.println("current load is", load)
 	}
 
 	return load
