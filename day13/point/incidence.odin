@@ -97,7 +97,7 @@ process_file :: proc(filename: string) -> (part1: int, part2: int, err: Mirror_E
 		fmt.printf("h: %d, v: %d\n", h, v)
 		part1 += 100 * h + v
 
-		h2, v2 := find_reflection_repaired(p, h, v)
+		h2, v2 := find_reflection_repaired(p)
 		fmt.printf("h2: %d, v2: %d\n", h2, v2)
 		part2 += 100 * h2 + v2
 	}
@@ -123,44 +123,35 @@ compare_row :: proc(pattern: Pattern, a, b: int) -> (diff: int) {
 	return diff
 }
 
-find_reflection_repaired :: proc(pattern: Pattern, old_h, old_v: int) -> (h, v: int) {
+find_reflection_repaired :: proc(pattern: Pattern) -> (h, v: int) {
 	p := 0
 	for i := 1; i < len(pattern.lines); i += 1 {
-		fmt.println("comparing:", p, i)
-		if compare_row(pattern, i, p) == 0 {
-			fmt.println("maybe:", p, i)
+		rowdiff := compare_row(pattern, i, p)
+		if rowdiff <= 1 {
+			// need to find a smudge if 0
+			// check whether it's true smudge if 1
 			n := min(len(pattern.lines) - i, p + 1)
-			fmt.println("range:", n)
-			checked := true
 			for k in 1 ..< n {
-				if compare_row(pattern, p - k, i + k) != 0 {
-					fmt.println(pattern.lines[p - k], pattern.lines[i + k])
-					checked = false
-					break
-				}
+				rowdiff += compare_row(pattern, p - k, i + k)
+				if rowdiff > 1 do break
 			}
-			if checked {
-				fmt.println("mirror:", p, i)
+			if rowdiff == 1 {
 				h = p + 1
 				break
-			} else {
-				fmt.println("not mirror:", p, i)
 			}
 		}
 		p = i
 	}
 	p = 0
 	for j := 1; j < len(pattern.lines[0]); j += 1 {
-		if compare_column(pattern, p, j) == 0 {
+		coldiff := compare_column(pattern, p, j)
+		if coldiff <= 1 {
 			n := min(len(pattern.lines[0]) - j, p + 1)
-			checked := true
 			for k in 1 ..< n {
-				if compare_column(pattern, p - k, j + k) != 0 {
-					checked = false
-					break
-				}
+				coldiff += compare_column(pattern, p - k, j + k)
+				if coldiff > 1 do break
 			}
-			if checked {
+			if coldiff == 1 {
 				v = p + 1
 				break
 			}
