@@ -1,0 +1,29 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task: run
+
+  run:
+    deps:
+      - build
+    cmds:
+      - bin/parabolic {{.CLI_ARGS}}
+    aliases:
+      - r
+    silent: true
+    method: none
+
+  build:
+    cmds:
+      - odin build parabolic -o:speed -out=bin/parabolic
+    aliases:
+      - b
+    silent: true
+    sources:
+      - './parabolic/**/*.odin'
+    generates:
+      - bin/parabolic
+
+interval: 250ms
