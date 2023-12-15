@@ -101,7 +101,15 @@ process_file :: proc(filename: string, cycles: int) -> (part1: int, part2: int, 
 	defer delete(platform.mirror)
 	defer for r in platform.mirror do delete(r)
 	// spin_cycle(platform, 1_000_000_000)
-	spin_cycle(platform, cycles)
+	cache: [dynamic]Platform
+	defer delete(cache)
+	defer for p in cache {
+		for r in p.mirror {
+			delete(r)
+		}
+		delete(p.mirror)
+	}
+	spin_cycle(&cache, platform, cycles)
 
 	// print_platform(platform)
 
@@ -120,12 +128,47 @@ print_platform :: proc(platform: Platform) {
 	fmt.println("")
 }
 
-spin_cycle :: proc(platform: Platform, cycle: int) {
-	for c in 0 ..< cycle {
+
+clone_platform :: proc(platform: Platform) -> (clone: Platform) {
+	clone.mirror = make([][]u8, len(platform.mirror))
+	for i in 0 ..< len(platform.mirror) {
+		clone.mirror[i] = slice.clone(platform.mirror[i])
+	}
+	return clone
+}
+
+is_same :: proc(a, b: Platform) -> bool {
+	for i in 0 ..< len(a.mirror) {
+		if !slice.simple_equal(a.mirror[i], b.mirror[i]) do return false
+	}
+
+	return true
+}
+
+spin_cycle :: proc(cache: ^[dynamic]Platform, platform: Platform, cycle: int) {
+	outer: for c in 0 ..< cycle {
 		spin_cycle_north(platform)
 		spin_cycle_west(platform)
 		spin_cycle_south(platform)
 		spin_cycle_east(platform)
+
+		for p, k in cache {
+			if is_same(platform, p) {
+				fmt.println("found cycle point at", c, "==", k)
+				fmt.println("cycle length is", c - k)
+				fmt.println(cycle - c, "cycles remain")
+				r := (cycle - c) % (c - k)
+				fmt.println("remainer is", r)
+				fmt.println("found answer cache at", k + r - 1)
+				for i := 0; i < len(platform.mirror); i += 1 {
+					for j := 0; j < len(platform.mirror[i]); j += 1 {
+						platform.mirror[i][j] = cache[k + r - 1].mirror[i][j]
+					}
+				}
+				break outer
+			}
+		}
+		append(cache, clone_platform(platform))
 	}
 }
 
