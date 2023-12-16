@@ -1,0 +1,29 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task: run
+
+  run:
+    deps:
+      - build
+    cmds:
+      - bin/lens {{.CLI_ARGS}}
+    aliases:
+      - r
+    silent: true
+    method: none
+
+  build:
+    cmds:
+      - odin build lens -o:speed -out=bin/lens
+    aliases:
+      - b
+    silent: true
+    sources:
+      - './lens/**/*.odin'
+    generates:
+      - bin/lens
+
+interval: 250ms
