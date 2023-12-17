@@ -98,14 +98,62 @@ process_file :: proc(filename: string) -> (part1: int, part2: int, err: Beam_Err
 	energize_map := make(map[Beam]struct {})
 	defer delete(energize_map)
 
-	trace_beam(lines, &energized, &energize_map, len(lines), len(lines[0]), 0, 0, .Right)
-	print_energy_map(&energized, len(lines), len(lines[0]))
+	trace_beam(lines, energized, &energize_map, len(lines), len(lines[0]), 0, 0, .Right)
+	// print_energy_map(energized, len(lines), len(lines[0]))
 	part1 = slice.count(energized, true)
+
+	for i := 0; i < len(lines); i += 1 {
+		for &e in energized do e = false
+		clear(&energize_map)
+		trace_beam(lines, energized, &energize_map, len(lines), len(lines[0]), i, 0, .Right)
+		energy := slice.count(energized, true)
+		if energy > part2 do part2 = energy
+	}
+	for i := 0; i < len(lines); i += 1 {
+		for &e in energized do e = false
+		clear(&energize_map)
+		trace_beam(
+			lines,
+			energized,
+			&energize_map,
+			len(lines),
+			len(lines[0]),
+			i,
+			len(lines[0]) - 1,
+			.Left,
+		)
+		energy := slice.count(energized, true)
+		if energy > part2 do part2 = energy
+	}
+	for i := 0; i < len(lines[0]); i += 1 {
+		for &e in energized do e = false
+		clear(&energize_map)
+		trace_beam(lines, energized, &energize_map, len(lines), len(lines[0]), 0, i, .Down)
+		energy := slice.count(energized, true)
+		if energy > part2 do part2 = energy
+	}
+	for i := 0; i < len(lines[0]); i += 1 {
+		for &e in energized do e = false
+		clear(&energize_map)
+		trace_beam(
+			lines,
+			energized,
+			&energize_map,
+			len(lines),
+			len(lines[0]),
+			len(lines) - 1,
+			i,
+			.Up,
+		)
+		energy := slice.count(energized, true)
+		if energy > part2 do part2 = energy
+	}
+
 
 	return part1, part2, nil
 }
 
-energize :: proc(energized: ^[]bool, max_row, max_col, row, col: int) {
+energize :: proc(energized: []bool, max_row, max_col, row, col: int) {
 	energized[row * max_col + col] = true
 }
 
@@ -116,7 +164,7 @@ Beam :: struct {
 
 trace_beam :: proc(
 	lines: []string,
-	energized: ^[]bool,
+	energized: []bool,
 	energize_map: ^map[Beam]struct {},
 	max_row, max_col, row, col: int,
 	dir: Direction,
@@ -196,7 +244,7 @@ trace_beam :: proc(
 	}
 }
 
-print_energy_map :: proc(energized: ^[]bool, max_row, max_col: int) {
+print_energy_map :: proc(energized: []bool, max_row, max_col: int) {
 	for i := 0; i < max_row; i += 1 {
 		for j := 0; j < max_col; j += 1 {
 			if energized[i * max_col + j] do fmt.print("#")
