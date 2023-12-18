@@ -39,13 +39,19 @@ main :: proc() {
 
 	defer {
 		if len(track.allocation_map) > 0 {
-			fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
+			fmt.eprintf(
+				"=== %v allocations not freed: ===\n",
+				len(track.allocation_map),
+			)
 			for _, entry in track.allocation_map {
 				fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
 			}
 		}
 		if len(track.bad_free_array) > 0 {
-			fmt.eprintf("=== %v incorrect frees: ===\n", len(track.bad_free_array))
+			fmt.eprintf(
+				"=== %v incorrect frees: ===\n",
+				len(track.bad_free_array),
+			)
 			for entry in track.bad_free_array {
 				fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
 			}
@@ -89,7 +95,13 @@ Node :: struct {
 	h:        int, // estimated distance to end node
 }
 
-process_file :: proc(filename: string) -> (part1: int, part2: int, err: Crucible_Error) {
+process_file :: proc(
+	filename: string,
+) -> (
+	part1: int,
+	part2: int,
+	err: Crucible_Error,
+) {
 	data, ok := os.read_entire_file(filename)
 	if !ok {
 		return 0, 0, Unable_To_Read_File{filename = filename}
@@ -141,18 +153,30 @@ process_file :: proc(filename: string) -> (part1: int, part2: int, err: Crucible
 	path2 := get_path(closed_list)
 	defer delete(path2)
 
-	if right1 < down1 {
-		fmt.println("path:", path1)
-	} else {
-		fmt.println("path:", path2)
-	}
+	fmt.println("right:", right1, "down:", down1)
+
+	print_path(lines, path1)
+	// if right1 < down1 {
+	// 	print_path(lines, path1)
+	// } else {
+	// 	print_path(lines, path2)
+	// }
 
 	part1 = min(right1, down1)
 
 	return part1, part2, nil
 }
 
-in_list :: proc(list: [dynamic]Node, row, col: int) -> int {
+in_list :: proc(list: [dynamic]Node, row, col: int, dir: Direction) -> int {
+	for i := 0; i < len(list); i += 1 {
+		if list[i].row == row && list[i].col == col && list[i].dir[0] == dir {
+			return i
+		}
+	}
+	return -1
+}
+
+in_open_list :: proc(list: [dynamic]Node, row, col: int) -> int {
 	for i := 0; i < len(list); i += 1 {
 		if list[i].row == row && list[i].col == col {
 			return i
@@ -177,6 +201,7 @@ get_path :: proc(closed_list: [dynamic]Node) -> (path: [dynamic]Node) {
 	for true {
 		row := node.row
 		col := node.col
+		dir := node.dir[1]
 		append(&path, node)
 		if (row == 1 && col == 0) || (row == 0 && col == 1) do break
 		switch node.dir[0] {
@@ -189,21 +214,67 @@ get_path :: proc(closed_list: [dynamic]Node) -> (path: [dynamic]Node) {
 		case .Right:
 			col -= 1
 		}
-		node = find_node(closed_list, row, col)
+		found := false
+		node, found = find_node(closed_list, row, col, dir)
+		if !found do break
 	}
 	return path
 }
 
-find_node :: proc(closed_list: [dynamic]Node, row, col: int) -> Node {
-	for n in closed_list {
-		if n.row == row && n.col == col {
-			return n
+print_path :: proc(lines: []string, nodes: [dynamic]Node) {
+	path := make([][]u8, len(lines))
+	defer delete(path)
+	defer for p in path do delete(p)
+	for i := 0; i < len(lines); i += 1 {
+		path[i] = make([]u8, len(lines[0]))
+		for j := 0; j < len(lines[0]); j += 1 {
+			path[i][j] = u8(lines[i][j])
 		}
 	}
-	return Node{}
+	heat := 0
+	for n in nodes {
+		fmt.println(n)
+		switch n.dir[0] {
+		case .Up:
+			path[n.row][n.col] = '^'
+		case .Down:
+			path[n.row][n.col] = 'v'
+		case .Left:
+			path[n.row][n.col] = '<'
+		case .Right:
+			path[n.row][n.col] = '>'
+		}
+		heat += n.w
+	}
+	for i := 0; i < len(lines); i += 1 {
+		for j := 0; j < len(lines[0]); j += 1 {
+			fmt.printf("%c", path[i][j])
+		}
+		fmt.println("")
+	}
+	fmt.println("heat loss:", heat)
 }
 
-find_path_a_star :: proc(lines: []string, open_list, closed_list: ^[dynamic]Node) -> int {
+find_node :: proc(
+	closed_list: [dynamic]Node,
+	row, col: int,
+	dir: Direction,
+) -> (
+	node: Node,
+	found: bool,
+) {
+	for n in closed_list {
+		if n.row == row && n.col == col && n.dir[0] == dir {
+			return n, true
+		}
+	}
+	return node, false
+}
+
+find_path_a_star :: proc(
+	lines: []string,
+	open_list, closed_list: ^[dynamic]Node,
+) -> int {
 	for len(open_list) > 0 {
 		lowest := 0
 		for i := 1; i < len(open_list); i += 1 {
@@ -227,9 +298,9 @@ find_path_a_star :: proc(lines: []string, open_list, closed_list: ^[dynamic]Node
 
 		if node.row - 1 >= 0 && node.dir[0] != .Down {
 			if !slice.all_of(node.dir[:], Direction.Up) {
-				j := in_list(closed_list^, node.row - 1, node.col)
-				if j == -1 { 	// on closed list, ignore
-					k := in_list(open_list^, node.row - 1, node.col)
+				j := in_list(closed_list^, node.row - 1, node.col, .Up)
+				if j == -1 { 	// not on closed list
+					k := in_list(open_list^, node.row - 1, node.col, .Up)
 					w := int(lines[node.row - 1][node.col] - '0')
 					g := node.g + w
 					if k == -1 { 	// not on open list
@@ -259,9 +330,9 @@ find_path_a_star :: proc(lines: []string, open_list, closed_list: ^[dynamic]Node
 		}
 		if node.col - 1 >= 0 && node.dir[0] != .Right {
 			if !slice.all_of(node.dir[:], Direction.Left) {
-				j := in_list(closed_list^, node.row, node.col - 1)
-				if j == -1 { 	// on closed list, ignore
-					k := in_list(open_list^, node.row, node.col - 1)
+				j := in_list(closed_list^, node.row, node.col - 1, .Left)
+				if j == -1 { 	// not on closed list
+					k := in_list(open_list^, node.row, node.col - 1, .Left)
 					w := int(lines[node.row][node.col - 1] - '0')
 					g := node.g + w
 					if k == -1 { 	// not on open list
@@ -291,9 +362,9 @@ find_path_a_star :: proc(lines: []string, open_list, closed_list: ^[dynamic]Node
 		}
 		if node.row + 1 < len(lines) && node.dir[0] != .Up {
 			if !slice.all_of(node.dir[:], Direction.Down) {
-				j := in_list(closed_list^, node.row + 1, node.col)
-				if j == -1 { 	// on closed list, ignore
-					k := in_list(open_list^, node.row + 1, node.col)
+				j := in_list(closed_list^, node.row + 1, node.col, .Down)
+				if j == -1 { 	// not on closed list
+					k := in_list(open_list^, node.row + 1, node.col, .Down)
 					w := int(lines[node.row + 1][node.col] - '0')
 					g := node.g + w
 					if k == -1 { 	// not on open list
@@ -322,11 +393,11 @@ find_path_a_star :: proc(lines: []string, open_list, closed_list: ^[dynamic]Node
 			}
 
 		}
-		if node.col + 1 < len(lines[0]) {
+		if node.col + 1 < len(lines[0]) && node.dir[0] != .Left {
 			if !slice.all_of(node.dir[:], Direction.Right) {
-				j := in_list(closed_list^, node.row, node.col + 1)
+				j := in_list(closed_list^, node.row, node.col + 1, .Right)
 				if j == -1 { 	// on closed list, ignore
-					k := in_list(open_list^, node.row, node.col + 1)
+					k := in_list(open_list^, node.row, node.col + 1, .Right)
 					w := int(lines[node.row][node.col + 1] - '0')
 					g := node.g + w
 					if k == -1 { 	// not on open list
@@ -339,7 +410,11 @@ find_path_a_star :: proc(lines: []string, open_list, closed_list: ^[dynamic]Node
 						right.dir[0] = .Right
 						right.dir[1] = node.dir[0]
 						right.dir[2] = node.dir[1]
-						right.h = get_heuristic(right, len(lines), len(lines[0]))
+						right.h = get_heuristic(
+							right,
+							len(lines),
+							len(lines[0]),
+						)
 						right.f = right.g + right.h
 						fmt.println("adding right")
 						append(open_list, right)
@@ -357,453 +432,3 @@ find_path_a_star :: proc(lines: []string, open_list, closed_list: ^[dynamic]Node
 	}
 	return 0
 }
-
-find_path :: proc(
-	lines: []string,
-	visited: ^[]bool,
-	current_heat: int,
-	max_row, max_col, row, col: int,
-	dir, dir2, dir3: Direction,
-) -> (
-	total_heat: int = 999999,
-	path: [dynamic]Node,
-) {
-	if row < 0 || row >= max_row || col < 0 || col >= max_col do return 999999, nil
-
-	if visited[row * max_col + col] do return 999999, nil
-	visited[row * max_col + col] = true
-
-	heat_loss := int(lines[row][col] - '0')
-
-	// do no more
-	if dir == .Up && row == 0 && col == max_col - 1 do return 999999, nil
-	if dir == .Left && row == max_row - 1 && col == 0 do return 999999, nil
-
-	heat := current_heat if row == 0 && col == 0 else current_heat + heat_loss
-
-	node := Node {
-		row = row,
-		col = col,
-		dir = dir,
-	}
-	if row == max_row - 1 && col == max_col - 1 {
-		append(&path, node)
-		return current_heat + heat_loss, path
-	}
-
-	// must change directions
-	if (dir == dir2 && dir2 == dir3) ||
-	   (dir == .Up && row == 0) ||
-	   (dir == .Left && col == 0) ||
-	   (dir == .Down && row == max_row - 1) ||
-	   (dir == .Right && col == max_col - 1) {
-		// need to change direction
-		switch dir {
-		case .Right:
-			visited_up := slice.clone(visited^)
-			defer delete(visited_up)
-			heat_up, path_up := find_path(
-				lines,
-				&visited_up,
-				heat,
-				max_row,
-				max_col,
-				row - 1,
-				col,
-				.Up,
-				dir,
-				dir2,
-			)
-			visited_down := slice.clone(visited^)
-			defer delete(visited_down)
-			heat_down, path_down := find_path(
-				lines,
-				&visited_down,
-				heat,
-				max_row,
-				max_col,
-				row + 1,
-				col,
-				.Down,
-				dir,
-				dir2,
-			)
-			if heat_up < heat_down {
-				delete(path_down)
-				append(&path_up, node)
-				total_heat = heat_up
-				path = path_up
-				set_visited(visited, visited_up)
-			} else {
-				delete(path_up)
-				if heat_down != 999999 {
-					append(&path_down, node)
-					total_heat = heat_down
-					path = path_down
-					set_visited(visited, visited_down)
-				}
-			}
-		case .Down:
-			visited_left := slice.clone(visited^)
-			defer delete(visited_left)
-			heat_left, path_left := find_path(
-				lines,
-				&visited_left,
-				heat,
-				max_row,
-				max_col,
-				row,
-				col - 1,
-				.Left,
-				dir,
-				dir2,
-			)
-			visited_right := slice.clone(visited^)
-			defer delete(visited_right)
-			heat_right, path_right := find_path(
-				lines,
-				&visited_right,
-				heat,
-				max_row,
-				max_col,
-				row,
-				col + 1,
-				.Right,
-				dir,
-				dir2,
-			)
-			if heat_left < heat_right {
-				delete(path_right)
-				append(&path_left, node)
-				total_heat = heat_left
-				path = path_left
-				set_visited(visited, visited_left)
-			} else {
-				delete(path_left)
-				if heat_right != 999999 {
-					append(&path_right, node)
-					total_heat = heat_right
-					path = path_right
-					set_visited(visited, visited_right)
-				}
-			}
-		case .Left:
-			visited_down := slice.clone(visited^)
-			defer delete(visited_down)
-			heat_down, path_down := find_path(
-				lines,
-				&visited_down,
-				heat,
-				max_row,
-				max_col,
-				row + 1,
-				col,
-				.Down,
-				dir,
-				dir2,
-			)
-			append(&path_down, node)
-			total_heat = heat_down
-			path = path_down
-			set_visited(visited, visited_down)
-		case .Up:
-			visited_right := slice.clone(visited^)
-			defer delete(visited_right)
-			heat_right, path_right := find_path(
-				lines,
-				&visited_right,
-				heat,
-				max_row,
-				max_col,
-				row,
-				col + 1,
-				.Right,
-				dir,
-				dir2,
-			)
-			if heat_right != 999999 {
-				append(&path_right, node)
-				total_heat = heat_right
-				path = path_right
-				set_visited(visited, visited_right)
-
-			}
-		}
-	} else {
-		switch dir {
-		case .Right:
-			visited_right := slice.clone(visited^)
-			defer delete(visited_right)
-			heat_right, path_right := find_path(
-				lines,
-				&visited_right,
-				heat,
-				max_row,
-				max_col,
-				row,
-				col + 1,
-				.Right,
-				dir,
-				dir2,
-			)
-			visited_up := slice.clone(visited^)
-			defer delete(visited_up)
-			heat_up, path_up := find_path(
-				lines,
-				&visited_up,
-				heat,
-				max_row,
-				max_col,
-				row - 1,
-				col,
-				.Up,
-				dir,
-				dir2,
-			)
-			visited_down := slice.clone(visited^)
-			defer delete(visited_down)
-			heat_down, path_down := find_path(
-				lines,
-				&visited_down,
-				heat,
-				max_row,
-				max_col,
-				row + 1,
-				col,
-				.Down,
-				dir,
-				dir2,
-			)
-			if heat_right < heat_up {
-				if heat_right < heat_down {
-					delete(path_up)
-					delete(path_down)
-					append(&path_right, node)
-					total_heat = heat_right
-					path = path_right
-					set_visited(visited, visited_right)
-				} else {
-					delete(path_up)
-					delete(path_right)
-					if heat_down != 999999 {
-						append(&path_down, node)
-						total_heat = heat_down
-						path = path_down
-						set_visited(visited, visited_down)
-					}
-				}
-			} else {
-				if heat_up < heat_down {
-					delete(path_right)
-					delete(path_down)
-					append(&path_up, node)
-					total_heat = heat_up
-					path = path_up
-					set_visited(visited, visited_up)
-				} else {
-					delete(path_right)
-					delete(path_up)
-					if heat_down != 999999 {
-						append(&path_down, node)
-						total_heat = heat_down
-						path = path_down
-						set_visited(visited, visited_down)
-					}
-				}
-			}
-		case .Down:
-			visited_down := slice.clone(visited^)
-			defer delete(visited_down)
-			heat_down, path_down := find_path(
-				lines,
-				&visited_down,
-				heat,
-				max_row,
-				max_col,
-				row + 1,
-				col,
-				.Down,
-				dir,
-				dir2,
-			)
-			visited_left := slice.clone(visited^)
-			defer delete(visited_left)
-			heat_left, path_left := find_path(
-				lines,
-				&visited_left,
-				heat,
-				max_row,
-				max_col,
-				row,
-				col - 1,
-				.Left,
-				dir,
-				dir2,
-			)
-			visited_right := slice.clone(visited^)
-			defer delete(visited_right)
-			heat_right, path_right := find_path(
-				lines,
-				&visited_right,
-				heat,
-				max_row,
-				max_col,
-				row,
-				col + 1,
-				.Right,
-				dir,
-				dir2,
-			)
-			if heat_down < heat_left {
-				if heat_down < heat_right {
-					delete(path_left)
-					delete(path_right)
-					append(&path_down, node)
-					total_heat = heat_down
-					path = path_down
-					set_visited(visited, visited_down)
-				} else {
-					delete(path_left)
-					delete(path_down)
-					if heat_right != 999999 {
-						append(&path_right, node)
-						total_heat = heat_right
-						path = path_right
-						set_visited(visited, visited_right)
-					}
-				}
-			} else {
-				if heat_left < heat_right {
-					delete(path_down)
-					delete(path_right)
-					append(&path_left, node)
-					total_heat = heat_left
-					path = path_left
-					set_visited(visited, visited_left)
-				} else {
-					delete(path_down)
-					delete(path_left)
-					if heat_right != 999999 {
-						append(&path_right, node)
-						total_heat = heat_right
-						path = path_right
-						set_visited(visited, visited_right)
-					}
-				}
-			}
-		case .Left:
-			visited_left := slice.clone(visited^)
-			defer delete(visited_left)
-			heat_left, path_left := find_path(
-				lines,
-				&visited_left,
-				heat,
-				max_row,
-				max_col,
-				row,
-				col - 1,
-				.Left,
-				dir,
-				dir2,
-			)
-			visited_down := slice.clone(visited^)
-			defer delete(visited_down)
-			heat_down, path_down := find_path(
-				lines,
-				&visited_down,
-				heat,
-				max_row,
-				max_col,
-				row + 1,
-				col,
-				.Down,
-				dir,
-				dir2,
-			)
-			if heat_left < heat_down {
-				delete(path_down)
-				append(&path_left, node)
-				total_heat = heat_left
-				path = path_left
-				set_visited(visited, visited_left)
-			} else {
-				delete(path_left)
-				append(&path_down, node)
-				total_heat = heat_down
-				path = path_down
-				set_visited(visited, visited_down)
-			}
-		case .Up:
-			visited_up := slice.clone(visited^)
-			defer delete(visited_up)
-			heat_up, path_up := find_path(
-				lines,
-				&visited_up,
-				heat,
-				max_row,
-				max_col,
-				row - 1,
-				col,
-				.Up,
-				dir,
-				dir2,
-			)
-			visited_right := slice.clone(visited^)
-			defer delete(visited_right)
-			heat_right, path_right := find_path(
-				lines,
-				&visited_right,
-				heat,
-				max_row,
-				max_col,
-				row,
-				col + 1,
-				.Right,
-				dir,
-				dir2,
-			)
-			if heat_up < heat_right {
-				delete(path_right)
-				append(&path_up, node)
-				total_heat = heat_up
-				path = path_up
-				set_visited(visited, visited_up)
-			} else {
-				delete(path_up)
-				if heat_right != 999999 {
-					append(&path_right, node)
-					total_heat = heat_right
-					path = path_right
-					set_visited(visited, visited_right)
-				}
-			}
-		}
-	}
-	// fmt.printf(
-	// 	"returning heat[%d][%d]=%d %v %v\n",
-	// 	row,
-	// 	col,
-	// 	total_heat,
-	// 	dir,
-	// 	path,
-	// )
-	return total_heat, path
-}
-
-set_visited :: proc(visited: ^[]bool, new_visited: []bool) {
-	for i := 0; i < len(visited); i += 1 {
-		visited[i] = new_visited[i]
-	}
-}
-
-print_map :: proc(energized: []bool, max_row, max_col: int) {
-	for i := 0; i < max_row; i += 1 {
-		for j := 0; j < max_col; j += 1 {
-			if energized[i * max_col + j] do fmt.print("#")
-			else do fmt.print(".")
-		}
-		fmt.println("")
-	}
-	fmt.println("")
-}
-
