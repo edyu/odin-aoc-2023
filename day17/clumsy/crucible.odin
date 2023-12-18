@@ -120,6 +120,8 @@ process_file :: proc(filename: string) -> (part1: int, part2: int, err: Crucible
 	fmt.println(start)
 	append(&open_list, start)
 	right1 := find_path_a_star(lines, &open_list, &closed_list)
+	path1 := get_path(closed_list)
+	defer delete(path1)
 	clear(&open_list)
 	clear(&closed_list)
 	w = int(lines[1][0] - '0')
@@ -136,6 +138,14 @@ process_file :: proc(filename: string) -> (part1: int, part2: int, err: Crucible
 	start.dir[2] = .Right
 	append(&open_list, start)
 	down1 := find_path_a_star(lines, &open_list, &closed_list)
+	path2 := get_path(closed_list)
+	defer delete(path2)
+
+	if right1 < down1 {
+		fmt.println("path:", path1)
+	} else {
+		fmt.println("path:", path2)
+	}
 
 	part1 = min(right1, down1)
 
@@ -158,6 +168,39 @@ get_heuristic :: proc(node: Node, max_row, max_col: int) -> int {
 	// 	(max_col - 1 - node.col) * (max_col - 1 - node.col) \
 	// )
 	return (max_row - 1 - node.row) + (max_col - 1 - node.col)
+}
+
+get_path :: proc(closed_list: [dynamic]Node) -> (path: [dynamic]Node) {
+	end := closed_list[len(closed_list) - 1]
+	fmt.println("end", end)
+	node := end
+	for true {
+		row := node.row
+		col := node.col
+		append(&path, node)
+		if (row == 1 && col == 0) || (row == 0 && col == 1) do break
+		switch node.dir[0] {
+		case .Up:
+			row += 1
+		case .Down:
+			row -= 1
+		case .Left:
+			col += 1
+		case .Right:
+			col -= 1
+		}
+		node = find_node(closed_list, row, col)
+	}
+	return path
+}
+
+find_node :: proc(closed_list: [dynamic]Node, row, col: int) -> Node {
+	for n in closed_list {
+		if n.row == row && n.col == col {
+			return n
+		}
+	}
+	return Node{}
 }
 
 find_path_a_star :: proc(lines: []string, open_list, closed_list: ^[dynamic]Node) -> int {
