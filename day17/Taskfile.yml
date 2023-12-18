@@ -1,0 +1,29 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task: run
+
+  run:
+    deps:
+      - build
+    cmds:
+      - bin/clumsy {{.CLI_ARGS}}
+    aliases:
+      - r
+    silent: true
+    method: none
+
+  build:
+    cmds:
+      - odin build clumsy -out=bin/clumsy
+    aliases:
+      - b
+    silent: true
+    sources:
+      - './clumsy/**/*.odin'
+    generates:
+      - bin/clumsy
+
+interval: 250ms
