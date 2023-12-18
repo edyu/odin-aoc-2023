@@ -39,19 +39,13 @@ main :: proc() {
 
 	defer {
 		if len(track.allocation_map) > 0 {
-			fmt.eprintf(
-				"=== %v allocations not freed: ===\n",
-				len(track.allocation_map),
-			)
+			fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
 			for _, entry in track.allocation_map {
 				fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
 			}
 		}
 		if len(track.bad_free_array) > 0 {
-			fmt.eprintf(
-				"=== %v incorrect frees: ===\n",
-				len(track.bad_free_array),
-			)
+			fmt.eprintf("=== %v incorrect frees: ===\n", len(track.bad_free_array))
 			for entry in track.bad_free_array {
 				fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
 			}
@@ -88,16 +82,14 @@ Direction :: enum {
 
 Node :: struct {
 	row, col: int,
-	dir:      Direction,
+	w:        int,
+	dir:      [3]Direction,
+	f:        int, // total cost of node
+	g:        int, // distance to start node
+	h:        int, // estimated distance to end node
 }
 
-process_file :: proc(
-	filename: string,
-) -> (
-	part1: int,
-	part2: int,
-	err: Crucible_Error,
-) {
+process_file :: proc(filename: string) -> (part1: int, part2: int, err: Crucible_Error) {
 	data, ok := os.read_entire_file(filename)
 	if !ok {
 		return 0, 0, Unable_To_Read_File{filename = filename}
@@ -109,51 +101,218 @@ process_file :: proc(
 	defer delete(lines)
 	if lines[len(lines) - 1] == "" do lines = lines[0:len(lines) - 1]
 
-	visited := make([]bool, len(lines) * len(lines[0]))
-	defer delete(visited)
-	visited2 := slice.clone(visited)
-	defer delete(visited2)
-
-	// right_heat, right_path := find_path(
-	// 	lines,
-	// 	&visited,
-	// 	0,
-	// 	len(lines),
-	// 	len(lines[0]),
-	// 	0,
-	// 	0,
-	// 	.Right,
-	// 	nil,
-	// 	nil,
-	// )
-	// defer delete(right_path)
-	down_heat, down_path := find_path(
-		lines,
-		&visited2,
-		0,
-		len(lines),
-		len(lines[0]),
-		0,
-		0,
-		.Down,
-		nil,
-		nil,
-	)
-	defer delete(down_path)
-	// fmt.println(right_heat, down_heat)
-	// if right_heat < down_heat {
-	// for p in right_path {
-	// 	fmt.println(p)
-	// }
-	// } else {
-	for p in down_path {
-		fmt.println(p)
+	open_list: [dynamic]Node
+	defer delete(open_list)
+	closed_list: [dynamic]Node
+	defer delete(closed_list)
+	w := int(lines[0][1] - '0')
+	start := Node {
+		row = 0,
+		col = 1,
+		w   = w,
+		g   = w,
 	}
-	// }
-	// part1 = min(right_heat, down_heat)
-	part1 = down_heat
+	start.h = get_heuristic(start, len(lines), len(lines[0]))
+	start.f = start.h + w
+	start.dir[0] = .Right
+	start.dir[1] = .Right
+	start.dir[2] = .Down
+	fmt.println(start)
+	append(&open_list, start)
+	right1 := find_path_a_star(lines, &open_list, &closed_list)
+	clear(&open_list)
+	clear(&closed_list)
+	w = int(lines[1][0] - '0')
+	start = Node {
+		row = 1,
+		col = 0,
+		w   = w,
+		g   = w,
+	}
+	start.h = get_heuristic(start, len(lines), len(lines[0]))
+	start.f = start.h + w
+	start.dir[0] = .Down
+	start.dir[1] = .Down
+	start.dir[2] = .Right
+	append(&open_list, start)
+	down1 := find_path_a_star(lines, &open_list, &closed_list)
+
+	part1 = min(right1, down1)
 
 	return part1, part2, nil
+}
+
+in_list :: proc(list: [dynamic]Node, row, col: int) -> int {
+	for i := 0; i < len(list); i += 1 {
+		if list[i].row == row && list[i].col == col {
+			return i
+		}
+	}
+	return -1
+}
+
+get_heuristic :: proc(node: Node, max_row, max_col: int) -> int {
+	// return node.w * ((max_row - 1 - node.row) + (max_col - 1 - node.col))
+	// return(
+	// 	(max_row - 1 - node.row) * (max_row - 1 - node.row) +
+	// 	(max_col - 1 - node.col) * (max_col - 1 - node.col) \
+	// )
+	return (max_row - 1 - node.row) + (max_col - 1 - node.col)
+}
+
+find_path_a_star :: proc(lines: []string, open_list, closed_list: ^[dynamic]Node) -> int {
+	for len(open_list) > 0 {
+		lowest := 0
+		for i := 1; i < len(open_list); i += 1 {
+			if open_list[i].f < open_list[lowest].f {
+				lowest = i
+			} else if open_list[i].f == open_list[lowest].f {
+				// lowest = i if open_list[i].h < open_list[lowest].h else lowest
+				// fmt.println("found equal:", open_list[i], open_list[lowest])
+			}
+		}
+		node := open_list[lowest]
+		// fmt.printf("open %v\n", open_list^)
+		fmt.printf("node[%d][%d]=%v\n", node.row, node.col, node)
+		append(closed_list, node)
+		ordered_remove(open_list, lowest)
+
+		if node.row == len(lines) - 1 && node.col == len(lines[0]) - 1 {
+			fmt.println("found end node")
+			return node.g
+		}
+
+		if node.row - 1 >= 0 && node.dir[0] != .Down {
+			if !slice.all_of(node.dir[:], Direction.Up) {
+				j := in_list(closed_list^, node.row - 1, node.col)
+				if j == -1 { 	// on closed list, ignore
+					k := in_list(open_list^, node.row - 1, node.col)
+					w := int(lines[node.row - 1][node.col] - '0')
+					g := node.g + w
+					if k == -1 { 	// not on open list
+						up := Node {
+							row = node.row - 1,
+							col = node.col,
+							w   = w,
+							g   = g,
+						}
+						up.dir[0] = .Up
+						up.dir[1] = node.dir[0]
+						up.dir[2] = node.dir[1]
+						up.h = get_heuristic(up, len(lines), len(lines[0]))
+						up.f = up.g + up.h
+						fmt.println("adding up")
+						append(open_list, up)
+					} else if g < open_list[k].g { 	// better g
+						fmt.println("found better", g, "for", open_list[k])
+						open_list[k].g = g
+						open_list[k].dir[0] = .Up
+						open_list[k].dir[1] = node.dir[0]
+						open_list[k].dir[2] = node.dir[1]
+						open_list[k].f = g + open_list[k].h
+					}
+				}
+			}
+		}
+		if node.col - 1 >= 0 && node.dir[0] != .Right {
+			if !slice.all_of(node.dir[:], Direction.Left) {
+				j := in_list(closed_list^, node.row, node.col - 1)
+				if j == -1 { 	// on closed list, ignore
+					k := in_list(open_list^, node.row, node.col - 1)
+					w := int(lines[node.row][node.col - 1] - '0')
+					g := node.g + w
+					if k == -1 { 	// not on open list
+						left := Node {
+							row = node.row,
+							col = node.col - 1,
+							w   = w,
+							g   = g,
+						}
+						left.dir[0] = .Left
+						left.dir[1] = node.dir[0]
+						left.dir[2] = node.dir[1]
+						left.h = get_heuristic(left, len(lines), len(lines[0]))
+						left.f = left.g + left.h
+						fmt.println("adding left")
+						append(open_list, left)
+					} else if g < open_list[k].g { 	// better g
+						fmt.println("found better", g, "for", open_list[k])
+						open_list[k].g = g
+						open_list[k].dir[0] = .Left
+						open_list[k].dir[1] = node.dir[0]
+						open_list[k].dir[2] = node.dir[1]
+						open_list[k].f = g + open_list[k].h
+					}
+				}
+			}
+		}
+		if node.row + 1 < len(lines) && node.dir[0] != .Up {
+			if !slice.all_of(node.dir[:], Direction.Down) {
+				j := in_list(closed_list^, node.row + 1, node.col)
+				if j == -1 { 	// on closed list, ignore
+					k := in_list(open_list^, node.row + 1, node.col)
+					w := int(lines[node.row + 1][node.col] - '0')
+					g := node.g + w
+					if k == -1 { 	// not on open list
+						down := Node {
+							row = node.row + 1,
+							col = node.col,
+							w   = w,
+							g   = g,
+						}
+						down.dir[0] = .Down
+						down.dir[1] = node.dir[0]
+						down.dir[2] = node.dir[1]
+						down.h = get_heuristic(down, len(lines), len(lines[0]))
+						down.f = down.g + down.h
+						fmt.println("adding down")
+						append(open_list, down)
+					} else if g < open_list[k].g { 	// better g
+						fmt.println("found better", g, "for", open_list[k])
+						open_list[k].g = g
+						open_list[k].dir[0] = .Down
+						open_list[k].dir[1] = node.dir[0]
+						open_list[k].dir[2] = node.dir[1]
+						open_list[k].f = g + open_list[k].h
+					}
+				}
+			}
+
+		}
+		if node.col + 1 < len(lines[0]) {
+			if !slice.all_of(node.dir[:], Direction.Right) {
+				j := in_list(closed_list^, node.row, node.col + 1)
+				if j == -1 { 	// on closed list, ignore
+					k := in_list(open_list^, node.row, node.col + 1)
+					w := int(lines[node.row][node.col + 1] - '0')
+					g := node.g + w
+					if k == -1 { 	// not on open list
+						right := Node {
+							row = node.row,
+							col = node.col + 1,
+							w   = w,
+							g   = g,
+						}
+						right.dir[0] = .Right
+						right.dir[1] = node.dir[0]
+						right.dir[2] = node.dir[1]
+						right.h = get_heuristic(right, len(lines), len(lines[0]))
+						right.f = right.g + right.h
+						fmt.println("adding right")
+						append(open_list, right)
+					} else if g < open_list[k].g { 	// better g
+						fmt.println("found better", g, "for", open_list[k])
+						open_list[k].g = g
+						open_list[k].dir[0] = .Right
+						open_list[k].dir[1] = node.dir[0]
+						open_list[k].dir[2] = node.dir[1]
+						open_list[k].f = g + open_list[k].h
+					}
+				}
+			}
+		}
+	}
+	return 0
 }
 
 find_path :: proc(
@@ -604,3 +763,4 @@ print_map :: proc(energized: []bool, max_row, max_col: int) {
 	}
 	fmt.println("")
 }
+
