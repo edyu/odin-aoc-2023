@@ -104,7 +104,8 @@ neighbors := [Direction][2]int {
 Node :: struct {
 	row, col: int,
 	w:        int,
-	dir:      [3]Direction,
+	dir:      Direction,
+	len:      int,
 	// f:        int, // total cost of node
 	// g:        int, // distance to start node
 	// h:        int, // estimated distance to end node
@@ -177,7 +178,7 @@ print_path :: proc(lines: []string, nodes: [dynamic]Node) {
 	heat := 0
 	for n in nodes[1:] {
 		fmt.println(n)
-		switch n.dir[0] {
+		switch n.dir {
 		case .Up:
 			path[n.row][n.col] = '^'
 		case .Down:
@@ -214,6 +215,7 @@ find_path_a_star :: proc(
 		row = 0,
 		col = 0,
 		w   = 0,
+		len = 1,
 	}
 	g_score[start] = 0
 	f_score[start] = get_heuristic(start, row_len, col_len)
@@ -254,11 +256,11 @@ find_path_a_star :: proc(
 				if dir == .Up || dir == .Left do continue
 			} else {
 				// cannot backtrack
-				if dir == opposite[current.dir[0]] {
+				if dir == opposite[current.dir] {
 					continue
 				}
 				// cannot be same direction more than 3 steps
-				if slice.all_of(current.dir[:], dir) {
+				if dir == current.dir && current.len == 3 {
 					continue
 				}
 			}
@@ -278,14 +280,13 @@ find_path_a_star :: proc(
 				row = row,
 				col = col,
 				w   = w,
+				dir = dir,
+				len = 1,
 			}
-			neighbor.dir[0] = dir
 			if current.row == 0 && current.col == 0 {
-				neighbor.dir[1] = dir
-				neighbor.dir[2] = .Down if dir == .Right else .Right
-			} else {
-				neighbor.dir[1] = current.dir[0]
-				neighbor.dir[2] = current.dir[1]
+				neighbor.len = 2
+			} else if neighbor.dir == current.dir {
+				neighbor.len += current.len
 			}
 			if !slice.contains(open_list.queue[:], neighbor) {
 				// not on open list
