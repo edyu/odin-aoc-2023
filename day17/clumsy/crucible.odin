@@ -135,7 +135,6 @@ process_file :: proc(
 	row_len := len(lines)
 	col_len := len(lines[0])
 	g_score := make(map[Node]int)
-	fmt.println("map.len=", len(g_score))
 	defer delete(g_score)
 	f_score := make(map[Node]int)
 	defer delete(f_score)
@@ -150,7 +149,6 @@ process_file :: proc(
 	g_score[start] = 0
 	f_score[start] = get_heuristic(start, row_len, col_len)
 
-	fmt.println(start)
 	append(&open_list, start)
 
 	heat1, path1 := find_path_a_star(
@@ -208,7 +206,6 @@ reconstruct_path :: proc(
 
 get_path :: proc(closed_list: [dynamic]Node) -> (path: [dynamic]Node) {
 	end := closed_list[len(closed_list) - 1]
-	fmt.println("end", end)
 	node := end
 	for true {
 		row := node.row
@@ -304,33 +301,36 @@ find_path_a_star :: proc(
 		}
 		current := open_list[lowest]
 		// fmt.printf("open %v\n", open_list^)
-		fmt.printf("curent[%d][%d]=%v\n", current.row, current.col, current)
-		fmt.printf(
-			"curent[%d][%d].g=%d\n",
-			current.row,
-			current.col,
-			g_score[current],
-		)
+		// fmt.printf("curent[%d][%d]=%v\n", current.row, current.col, current)
+		// fmt.printf(
+		// 	"curent[%d][%d].g=%d\n",
+		// 	current.row,
+		// 	current.col,
+		// 	g_score[current],
+		// )
 
 		row_len := len(lines)
 		col_len := len(lines[0])
 
 		if current.row == row_len - 1 && current.col == col_len - 1 {
-			fmt.println("found end node")
 			return g_score[current], reconstruct_path(came_from^, current)
 		}
 
 		ordered_remove(open_list, lowest)
 
 		for dir in Direction {
-			if current.row != 0 && current.col != 0 {
-				// cannot backtrack
-				if dir == opposite[current.dir[0]] do continue
-				// cannot be same direction more than 3 steps
-				if slice.all_of(current.dir[:], dir) do continue
-			} else {
+			if current.row == 0 && current.col == 0 {
 				// starting node cannot go up or left
 				if dir == .Up || dir == .Left do continue
+			} else {
+				// cannot backtrack
+				if dir == opposite[current.dir[0]] {
+					continue
+				}
+				// cannot be same direction more than 3 steps
+				if slice.all_of(current.dir[:], dir) {
+					continue
+				}
 			}
 
 			offsets := neighbors[dir]
@@ -344,21 +344,21 @@ find_path_a_star :: proc(
 
 			w := int(lines[row][col] - '0')
 			tentative_g := g_score[current] + w
-			k := in_list(open_list^, row, col, dir)
-			if k == -1 { 	// not on open list
-				neighbor := Node {
-					row = row,
-					col = col,
-					w   = w,
-				}
-				neighbor.dir[0] = dir
-				if current.row == 0 && current.col == 0 {
-					neighbor.dir[1] = dir
-					neighbor.dir[2] = .Down if dir == .Right else .Right
-				} else {
-					neighbor.dir[1] = current.dir[0]
-					neighbor.dir[2] = current.dir[1]
-				}
+			neighbor := Node {
+				row = row,
+				col = col,
+				w   = w,
+			}
+			neighbor.dir[0] = dir
+			if current.row == 0 && current.col == 0 {
+				neighbor.dir[1] = dir
+				neighbor.dir[2] = .Down if dir == .Right else .Right
+			} else {
+				neighbor.dir[1] = current.dir[0]
+				neighbor.dir[2] = current.dir[1]
+			}
+			if !slice.contains(open_list[:], neighbor) {
+				// not on open list
 				if !(neighbor in g_score) do g_score[neighbor] = 1000000
 				if !(neighbor in f_score) do f_score[neighbor] = 1000000
 				if tentative_g < g_score[neighbor] {
@@ -366,18 +366,10 @@ find_path_a_star :: proc(
 					g_score[neighbor] = tentative_g
 					f_score[neighbor] =
 						tentative_g + get_heuristic(neighbor, row_len, col_len)
-					fmt.println("adding", dir)
 					append(open_list, neighbor)
 				}
 			} else {
-				neighbor := open_list[k]
 				if tentative_g < g_score[neighbor] { 	// better g
-					fmt.println(
-						"open: found better",
-						tentative_g,
-						"for",
-						neighbor,
-					)
 					came_from[neighbor] = current
 					g_score[neighbor] = tentative_g
 					f_score[neighbor] =
