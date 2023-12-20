@@ -17,7 +17,7 @@ tasks:
 
   build:
     cmds:
-      - odin build clumsy -out=bin/clumsy
+      - odin build clumsy -o:speed -out=bin/clumsy
     aliases:
       - b
     silent: true
