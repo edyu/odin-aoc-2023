@@ -1,0 +1,29 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task: run
+
+  run:
+    deps:
+      - build
+    cmds:
+      - bin/lavaduct {{.CLI_ARGS}}
+    aliases:
+      - r
+    silent: true
+    method: none
+
+  build:
+    cmds:
+      - odin build lavaduct -o:speed -out=bin/lavaduct
+    aliases:
+      - b
+    silent: true
+    sources:
+      - './lavaduct/**/*.odin'
+    generates:
+      - bin/lavaduct
+
+interval: 250ms
