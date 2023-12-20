@@ -139,10 +139,20 @@ process_file :: proc(
 	heat1, path1 := find_path_a_star(lines, &g_score, &f_score, &came_from)
 	defer delete(path1)
 
-	print_path(lines, path1)
-	part1 = heat1
+	clear(&g_score)
+	clear(&f_score)
+	clear(&came_from)
+	heat2, path2 := find_ultra_path_a_star(
+		lines,
+		&g_score,
+		&f_score,
+		&came_from,
+	)
+	defer delete(path2)
 
-	return part1, part2, nil
+	print_path(lines, path2)
+
+	return heat1, heat2, nil
 }
 
 get_heuristic :: proc(node: Node, max_row, max_col: int) -> int {
@@ -305,6 +315,135 @@ find_path_a_star :: proc(
 					g_score[neighbor] = tentative_g
 					f_score[neighbor] =
 						tentative_g + get_heuristic(neighbor, row_len, col_len)
+				}
+			}
+		}
+	}
+	return -1, nil
+}
+
+find_ultra_path_a_star :: proc(
+	lines: []string,
+	g_score: ^map[Node]int,
+	f_score: ^map[Node]int,
+	came_from: ^map[Node]Node,
+) -> (
+	heat: int,
+	path: [dynamic]Node,
+) {
+	row_len := len(lines)
+	col_len := len(lines[0])
+
+	start := Node {
+		row = 0,
+		col = 0,
+		w   = 0,
+		len = 0,
+	}
+	g_score[start] = 0
+	f_score[start] = get_heuristic(start, row_len, col_len)
+
+	Context :: struct {
+		f_score: ^map[Node]int,
+	}
+
+	ctx := Context{f_score}
+	context.user_ptr = &ctx
+
+	open_list: pq.Priority_Queue(Node)
+	defer pq.destroy(&open_list)
+
+	pq.init(&open_list, (proc(a, b: Node) -> bool {
+				ctx := cast(^Context)context.user_ptr
+
+				if !(a in ctx.f_score) do ctx.f_score[a] = 1000000
+				if !(b in ctx.f_score) do ctx.f_score[b] = 1000000
+
+				fa := ctx.f_score[a]
+				fb := ctx.f_score[b]
+				return fa < fb
+			}), pq.default_swap_proc(Node))
+
+	pq.push(&open_list, start)
+
+	for pq.len(open_list) != 0 {
+		current := pq.pop(&open_list)
+
+		if current.len >= 4 &&
+		   current.len <= 10 &&
+		   current.row == row_len - 1 &&
+		   current.col == col_len - 1 {
+			return g_score[current], reconstruct_path(came_from^, current)
+		}
+
+		for dir in Direction {
+			if current.row == 0 && current.col == 0 {
+				// starting node cannot go up or left
+				if dir == .Up || dir == .Left do continue
+			} else {
+				// cannot backtrack
+				if dir == opposite[current.dir] {
+					continue
+				}
+				// cannot be same direction more than 3 steps
+				if dir == current.dir && current.len == 10 {
+					continue
+				}
+				if dir != current.dir && current.len < 4 {
+					continue
+				}
+			}
+
+			offsets := neighbors[dir]
+			row := current.row + offsets.x
+			col := current.col + offsets.y
+
+			// out of bounds
+			if row < 0 || col < 0 || row == row_len || col == col_len {
+				continue
+			}
+
+			w := int(lines[row][col] - '0')
+			tentative_g := g_score[current] + w
+			neighbor := Node {
+				row = row,
+				col = col,
+				w   = w,
+				dir = dir,
+				len = 1,
+			}
+			if current.row == 0 && current.col == 0 {
+				neighbor.len = 1
+			} else if neighbor.dir == current.dir {
+				neighbor.len += current.len
+			}
+			found: bool
+			idx: int
+			for n, i in open_list.queue[:] {
+				if n == neighbor {
+					found = true
+					idx = i
+					break
+				}
+			}
+			if !found {
+				// not on open list
+				if !(neighbor in g_score) do g_score[neighbor] = 1000000
+				if !(neighbor in f_score) do f_score[neighbor] = 1000000
+				if tentative_g < g_score[neighbor] {
+					came_from[neighbor] = current
+					g_score[neighbor] = tentative_g
+					f_score[neighbor] =
+						tentative_g + get_heuristic(neighbor, row_len, col_len)
+					pq.push(&open_list, neighbor)
+				}
+			} else {
+				if tentative_g < g_score[neighbor] { 	// better g
+					came_from[neighbor] = current
+					g_score[neighbor] = tentative_g
+					f_score[neighbor] =
+						tentative_g + get_heuristic(neighbor, row_len, col_len)
+					pq.fix(&open_list, idx)
 				}
 			}
 		}
