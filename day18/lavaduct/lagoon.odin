@@ -86,6 +86,10 @@ plan := map[u8]Direction {
 	'R' = .Right,
 	'U' = .Up,
 	'L' = .Left,
+	'0' = .Right,
+	'1' = .Down,
+	'2' = .Left,
+	'3' = .Up,
 }
 
 step := [Direction][2]int {
@@ -113,9 +117,43 @@ process_file :: proc(filename: string) -> (part1: int, part2: int, err: Lagoon_E
 	volume1, interior := dig_interior(trench)
 	defer delete(interior)
 	defer for r in interior do delete(r)
-	print_trench(interior)
+	// print_trench(interior)
 
-	return volume1, part2, nil
+	volume2 := dig_big_trench(lines)
+
+	return volume1, volume2, nil
+}
+
+dig_big_trench :: proc(lines: []string) -> (volume: int) {
+	vertices: [dynamic][2]int
+	defer delete(vertices)
+
+	point := [2]int{0, 0}
+	append(&vertices, point)
+
+	perimeter := 0
+
+	for l in lines {
+		hash := strings.index_rune(l, '#')
+		meters, _ := strconv.parse_int(l[hash + 1:hash + 6], base = 16)
+		dir := plan[l[hash + 6]]
+		point += step[dir] * meters
+		perimeter += meters
+		append(&vertices, point)
+	}
+
+	fmt.println("perimeter", perimeter)
+
+	// green's theorem: 1/2 * summation{ x(i) * y(i+1) - x(i) * y(i) }
+	area := 0
+	for i := 0; i < len(vertices) - 1; i += 1 {
+		area += vertices[i].x * vertices[i + 1].y - vertices[i + 1].x * vertices[i].y
+	}
+	area /= 2
+	area = abs(area)
+	fmt.println("area", area)
+	volume = area + (perimeter / 2) + 1
+	return volume
 }
 
 dig_trench :: proc(lines: []string) -> (trench: [][]bool) {
@@ -167,13 +205,12 @@ dig_trench :: proc(lines: []string) -> (trench: [][]bool) {
 			trench[i][j] = ground[min_row + i - 1][min_col + j - 1]
 		}
 	}
-	print_trench(trench)
+	// print_trench(trench)
 
 	return trench
 }
 
 dig_interior :: proc(trench: [][]bool) -> (volume: int, interior: [][]bool) {
-	fmt.println("[2][2]:", trench[2][2])
 	interior = make([][]bool, len(trench) - 2)
 	for i := 1; i < len(trench) - 1; i += 1 {
 		j := 1
