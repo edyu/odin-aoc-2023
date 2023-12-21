@@ -1,0 +1,29 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task: run
+
+  run:
+    deps:
+      - build
+    cmds:
+      - bin/aplenty {{.CLI_ARGS}}
+    aliases:
+      - r
+    silent: true
+    method: none
+
+  build:
+    cmds:
+      - odin build aplenty -out=bin/aplenty
+    aliases:
+      - b
+    silent: true
+    sources:
+      - './aplenty/**/*.odin'
+    generates:
+      - bin/aplenty
+
+interval: 250ms
