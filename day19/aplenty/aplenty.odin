@@ -1,6 +1,6 @@
 package aplenty
 
-import pq "core:container/priority_queue"
+import q "core:container/queue"
 import "core:fmt"
 import "core:log"
 import "core:math"
@@ -112,6 +112,7 @@ process_file :: proc(filename: string) -> (part1: int, part2: int, err: Workflow
 		rating, accepted := run_workflow(workflows, p)
 		if accepted do part1 += rating
 	}
+	part2 = count_acceptable_workflows(workflows)
 
 	return part1, part2, nil
 }
@@ -189,6 +190,11 @@ rate_parts :: proc(part: Input) -> (rating: int) {
 	return rating
 }
 
+Workflow_Range :: struct {
+	name:       string,
+	x, m, a, s: [2]int,
+}
+
 run_workflow :: proc(workflows: map[string][]Rule, part: Input) -> (rating: int, accepted: bool) {
 	next := "in"
 
@@ -228,6 +234,155 @@ run_workflow :: proc(workflows: map[string][]Rule, part: Input) -> (rating: int,
 			}
 		}
 	}
+	return
+}
+
+compute_combinatorics :: proc(x, m, a, s: [2]int) -> (combinatorics: int) {
+	combinatorics = 1
+
+	combinatorics *= x.y - x.x + 1
+	combinatorics *= m.y - m.x + 1
+	combinatorics *= a.y - a.x + 1
+	combinatorics *= s.y - s.x + 1
+
+	return
+}
+
+count_acceptable_workflows :: proc(workflows: map[string][]Rule) -> (combinatorics: int) {
+	work: q.Queue(Workflow_Range)
+	defer q.destroy(&work)
+	q.push(
+		&work,
+		Workflow_Range {
+			name = "in",
+			x = [2]int{1, 4000},
+			m = [2]int{1, 4000},
+			a = [2]int{1, 4000},
+			s = [2]int{1, 4000},
+		},
+	)
+
+	outer: for q.len(work) != 0 {
+		ranges := q.pop_front(&work)
+		rules := workflows[ranges.name]
+		inner: for rule in rules {
+			switch rule.operator {
+			case .A:
+				// fmt.println("adding", ranges)
+				combinatorics += compute_combinatorics(ranges.x, ranges.m, ranges.a, ranges.s)
+				continue outer
+			case .R:
+				continue outer
+			case .Next:
+				q.push_back(
+					&work,
+					Workflow_Range{rule.name, ranges.x, ranges.m, ranges.a, ranges.s},
+				)
+				continue outer
+			case .LT:
+				match: [2]int
+				switch rule.match {
+				case 'x':
+					match = ranges.x
+				case 'm':
+					match = ranges.m
+				case 'a':
+					match = ranges.a
+				case 's':
+					match = ranges.s
+				}
+				if match.x < rule.number {
+					left, right: [2]int
+					middle := min(match.y, rule.number - 1)
+					left.x = match.x
+					left.y = middle
+					right.x = rule.number
+					right.y = match.y
+					// fmt.println("splitting", rule.match, left, right)
+					sub := ranges
+					leftover := ranges
+					switch rule.match {
+					case 'x':
+						sub.x = left
+						leftover.x = right
+					case 'm':
+						sub.m = left
+						leftover.m = right
+					case 'a':
+						sub.a = left
+						leftover.a = right
+					case 's':
+						sub.s = left
+						leftover.s = right
+					}
+
+					if rule.name == "A" {
+						// fmt.println("adding", sub)
+						combinatorics += compute_combinatorics(sub.x, sub.m, sub.a, sub.s)
+					} else if rule.name == "R" {
+					} else {
+						sub.name = rule.name
+						q.push_back(&work, sub)
+					}
+					if right.y - right.x <= 0 do continue outer
+					ranges = leftover
+				} else {
+					continue outer
+				}
+			case .GT:
+				match: [2]int
+				switch rule.match {
+				case 'x':
+					match = ranges.x
+				case 'm':
+					match = ranges.m
+				case 'a':
+					match = ranges.a
+				case 's':
+					match = ranges.s
+				}
+				if match.y > rule.number {
+					left, right: [2]int
+					middle := max(match.x, rule.number + 1)
+					left.x = match.x
+					left.y = rule.number
+					right.x = middle
+					right.y = match.y
+					// fmt.println("splitting", rule.match, left, right)
+					sub := ranges
+					leftover := ranges
+					switch rule.match {
+					case 'x':
+						sub.x = right
+						leftover.x = left
+					case 'm':
+						sub.m = right
+						leftover.m = left
+					case 'a':
+						sub.a = right
+						leftover.a = left
+					case 's':
+						sub.s = right
+						leftover.s = left
+					}
+
+					if rule.name == "A" {
+						// fmt.println("adding", sub)
+						combinatorics += compute_combinatorics(sub.x, sub.m, sub.a, sub.s)
+					} else if rule.name == "R" {
+					} else {
+						sub.name = rule.name
+						q.push_back(&work, sub)
+					}
+					if left.y - left.x <= 0 do continue outer
+					ranges = leftover
+				} else {
+					continue outer
+				}
+			}
+		}
+	}
+
 	return
 }
 
