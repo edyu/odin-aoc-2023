@@ -1,0 +1,29 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task: run
+
+  run:
+    deps:
+      - build
+    cmds:
+      - bin/pulse {{.CLI_ARGS}}
+    aliases:
+      - r
+    silent: true
+    method: none
+
+  build:
+    cmds:
+      - odin build pulse -out=bin/pulse
+    aliases:
+      - b
+    silent: true
+    sources:
+      - './pulse/**/*.odin'
+    generates:
+      - bin/pulse
+
+interval: 250ms
