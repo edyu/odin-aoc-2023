@@ -56,13 +56,15 @@ main :: proc() {
 	arguments := os.args[1:]
 
 	if len(arguments) < 1 {
-		fmt.printf("Usage: %s <file>\n", os.args[0])
+		fmt.printf("Usage: %s <file> [<times>]\n", os.args[0])
 		os.exit(1)
 	}
 	filename := arguments[0]
+	times := 1000
+	if len(arguments) > 1 do times = strconv.atoi(arguments[1])
 
 	time_start := time.tick_now()
-	part1, part2, error := process_file(filename)
+	part1, part2, error := process_file(filename, times)
 	time_took := time.tick_since(time_start)
 	// memory_used := arena.peak_used
 	if error != nil {
@@ -75,9 +77,15 @@ main :: proc() {
 }
 
 Module :: union {
+	Button,
 	Broadcast,
 	Flip_Flop,
 	Conjunction,
+}
+
+Button :: struct {
+	name:        string,
+	destination: string,
 }
 
 Broadcast :: struct {
@@ -93,11 +101,18 @@ Flip_Flop :: struct {
 
 Conjunction :: struct {
 	name:         string,
+	inputs:       map[string]bool,
 	destinations: []string,
-	remember:     bool,
 }
 
-process_file :: proc(filename: string) -> (part1: int, part2: int, err: Module_Error) {
+process_file :: proc(
+	filename: string,
+	times: int = 1000,
+) -> (
+	part1: int,
+	part2: int,
+	err: Module_Error,
+) {
 	data, ok := os.read_entire_file(filename)
 	if !ok {
 		return 0, 0, Unable_To_Read_File{filename = filename}
@@ -111,27 +126,38 @@ process_file :: proc(filename: string) -> (part1: int, part2: int, err: Module_E
 
 	modules := parse_configuration(lines)
 	defer delete(modules)
-	defer for m in modules {
-		#partial switch t in m {
+	defer for k in modules {
+		#partial switch t in modules[k] {
 		case Broadcast:
 			delete(t.destinations)
 		case Flip_Flop:
 			delete(t.destinations)
 		case Conjunction:
+			// delete(t.inputs)
 			delete(t.destinations)
 		}
 	}
-	for m in modules {
-		fmt.println(m)
+	for k in modules {
+		fmt.println(modules[k])
 	}
-	low, high := press_button(modules[:])
+	low, high := press_button(modules, times)
 	fmt.println("low:", low, "high:", high)
-	part1 = low * 1000 * high * 1000
+	part1 = low * high
 
 	return part1, part2, nil
 }
 
-parse_configuration :: proc(lines: []string) -> (modules: [dynamic]Module) {
+parse_configuration :: proc(lines: []string) -> (modules: map[string]Module) {
+	conjunctions: map[string]Conjunction
+	defer delete(conjunctions)
+	for line in lines {
+		arrow := strings.index(line, " -> ")
+		name := line[1:arrow]
+		if line[0] == '&' do conjunctions[name] = Conjunction {
+			name = name,
+		}
+	}
+	fmt.println("found", len(conjunctions), "conjunctions:", conjunctions)
 	for line in lines {
 		arrow := strings.index(line, " -> ")
 		if line[0] == '%' {
@@ -139,19 +165,33 @@ parse_configuration :: proc(lines: []string) -> (modules: [dynamic]Module) {
 			flip_flop.name = line[1:arrow]
 			dst_string := line[arrow + 4:]
 			flip_flop.destinations = strings.split(dst_string, ", ")
-			append(&modules, flip_flop)
+			for d in flip_flop.destinations {
+				if d in conjunctions {
+					c := conjunctions[d]
+					c.inputs[flip_flop.name] = false
+					conjunctions[d] = c
+				}
+			}
+			modules[flip_flop.name] = flip_flop
 		} else if line[0] == '&' {
-			conjunction: Conjunction
-			conjunction.name = line[1:arrow]
+			name := line[1:arrow]
+			conj := conjunctions[name]
 			dst_string := line[arrow + 4:]
-			conjunction.destinations = strings.split(dst_string, ", ")
-			append(&modules, conjunction)
+			conj.destinations = strings.split(dst_string, ", ")
+			for d in conj.destinations {
+				if d in conjunctions {
+					c := conjunctions[d]
+					c.inputs[name] = false
+					conjunctions[d] = c
+				}
+			}
+			modules[name] = conj
 		} else {
 			broadcast: Broadcast
 			broadcast.name = line[0:arrow]
 			dst_string := line[arrow + 4:]
 			broadcast.destinations = strings.split(dst_string, ", ")
-			append(&modules, broadcast)
+			modules[broadcast.name] = broadcast
 		}
 	}
 
@@ -159,80 +199,78 @@ parse_configuration :: proc(lines: []string) -> (modules: [dynamic]Module) {
 }
 
 Input :: struct {
-	pulse:  bool,
-	module: string,
+	from:  string,
+	pulse: bool,
+	to:    string,
 }
 
-press_button :: proc(modules: []Module) -> (low, high: int) {
-	module_map: map[string]Module
-	defer delete(module_map)
+print_signal :: proc(input: Input) {
+	pulse := "-high->" if input.pulse else "-low->"
+	fmt.printf("%s %s %s\n", input.from, pulse, input.to)
+}
+
+press_button :: proc(modules: map[string]Module, times: int) -> (low, high: int) {
 	sequence: q.Queue(Input)
 	defer q.destroy(&sequence)
-	for m in modules {
-		switch t in m {
-		case Broadcast:
-			q.push_back(&sequence, Input{module = t.name})
-			module_map[t.name] = m
-		case Conjunction:
-			q.push_back(&sequence, Input{module = t.name})
-			module_map[t.name] = m
-		case Flip_Flop:
-			q.push_back(&sequence, Input{module = t.name})
-			module_map[t.name] = m
-		}
-	}
 
 	// initial button pulse
-	low += 1
-	fmt.println("initial(", q.len(sequence), "):", sequence)
-	for q.len(sequence) != 0 {
-		fmt.println("sequence.len", q.len(sequence))
-		input := q.pop_front(&sequence)
-		fmt.println("processing", input)
-		module := module_map[input.module]
-		pulse := input.pulse
-		switch &m in &module_map[input.module] {
-		case Broadcast:
-			fmt.println("broadcast.destinations:", m.destinations)
-			#reverse for d in m.destinations {
-				fmt.println("adding", d, "pulse", pulse)
-				q.push_front(&sequence, Input{pulse, d})
-				if pulse do high += 1
-				else do low += 1
-			}
-			fmt.println("post broadcast low:", low, "high:", high)
-			fmt.println("post broadcast: sequence:", sequence)
-		case Conjunction:
-			if m.remember && pulse {
-				pulse = false // low pulse
-			} else {
-				pulse = true // high pulse
-			}
-			m.remember = pulse
-			#reverse for d in m.destinations {
-				q.push_front(&sequence, Input{pulse, d})
-				if pulse do high += 1
-				else do low += 1
-			}
-		case Flip_Flop:
-			if pulse { 	// high pulse
-				// do nothing
-			} else { 	// low pulse
-				fmt.println("flipflop", m.name, "was", m.on)
-				m.on = !m.on
-				if m.on { 	// was off
-					// q.push_front(&sequence, Input{true, m.destination})
-					high += 1
-				} else { 	// was on
-					// q.push_front(&sequence, Input{false, m.destination})
-					low += 1
+	for i := 0; i < times; i += 1 {
+		q.push(&sequence, Input{from = "button", pulse = false, to = "broadcaster"})
+		for q.len(sequence) != 0 {
+			input := q.pop_front(&sequence)
+			print_signal(input)
+			if input.pulse do high += 1
+			else do low += 1
+			if input.to in modules {
+				#partial switch &to in &modules[input.to] {
+				case Broadcast:
+					for d in to.destinations {
+						q.push_back(&sequence, Input{from = to.name, pulse = input.pulse, to = d})
+					}
+				case Conjunction:
+					to.inputs[input.from] = input.pulse
+					all_inputs := true
+					for n in to.inputs {
+						if !to.inputs[n] {
+							all_inputs = false
+							break
+						}
+					}
+					if all_inputs && input.pulse { 	// remembers high pulses
+						for d in to.destinations {
+							// send low pulse
+							q.push_back(&sequence, Input{from = to.name, pulse = false, to = d})
+						}
+					} else { 	// remembers low pulses
+						for d in to.destinations {
+							// send high pulse
+							q.push_back(&sequence, Input{from = to.name, pulse = true, to = d})
+						}
+					}
+				case Flip_Flop:
+					if input.pulse { 	// high pulse
+						// do nothing
+					} else { 	// low pulse
+						to.on = !to.on
+						if to.on { 	// was off
+							for d in to.destinations {
+								// high pulse
+								q.push_back(&sequence, Input{from = to.name, pulse = true, to = d})
+							}
+						} else { 	// was on
+							for d in to.destinations {
+								// low pulse
+								q.push_back(
+									&sequence,
+									Input{from = to.name, pulse = false, to = d},
+								)
+							}
+						}
+					}
 				}
-				fmt.println("flipflop", module_map[m.name])
-				fmt.println("post flipflop low:", low, "high:", high)
 			}
 		}
-		fmt.println(sequence)
-		fmt.println("end of loop:", sequence)
+		fmt.println("low:", low, "high:", high)
 	}
 	return
 }
