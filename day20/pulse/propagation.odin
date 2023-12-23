@@ -40,13 +40,19 @@ main :: proc() {
 
 	defer {
 		if len(track.allocation_map) > 0 {
-			fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
+			fmt.eprintf(
+				"=== %v allocations not freed: ===\n",
+				len(track.allocation_map),
+			)
 			for _, entry in track.allocation_map {
 				fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
 			}
 		}
 		if len(track.bad_free_array) > 0 {
-			fmt.eprintf("=== %v incorrect frees: ===\n", len(track.bad_free_array))
+			fmt.eprintf(
+				"=== %v incorrect frees: ===\n",
+				len(track.bad_free_array),
+			)
 			for entry in track.bad_free_array {
 				fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
 			}
@@ -124,7 +130,7 @@ process_file :: proc(
 	defer delete(lines)
 	if lines[len(lines) - 1] == "" do lines = lines[0:len(lines) - 1]
 
-	modules := parse_configuration(lines)
+	modules := parse_configuration(&lines)
 	defer delete(modules)
 	defer for k in modules {
 		#partial switch t in modules[k] {
@@ -133,7 +139,7 @@ process_file :: proc(
 		case Flip_Flop:
 			delete(t.destinations)
 		case Conjunction:
-			// delete(t.inputs)
+			delete(t.inputs)
 			delete(t.destinations)
 		}
 	}
@@ -147,14 +153,17 @@ process_file :: proc(
 	return part1, part2, nil
 }
 
-parse_configuration :: proc(lines: []string) -> (modules: map[string]Module) {
+parse_configuration :: proc(lines: ^[]string) -> (modules: map[string]Module) {
 	conjunctions: map[string]Conjunction
 	defer delete(conjunctions)
 	for line in lines {
 		arrow := strings.index(line, " -> ")
 		name := line[1:arrow]
+		dst_string := line[arrow + 4:]
 		if line[0] == '&' do conjunctions[name] = Conjunction {
-			name = name,
+			name         = name,
+			inputs       = make(map[string]bool),
+			destinations = strings.split(dst_string, ", "),
 		}
 	}
 	fmt.println("found", len(conjunctions), "conjunctions:", conjunctions)
@@ -167,25 +176,32 @@ parse_configuration :: proc(lines: []string) -> (modules: map[string]Module) {
 			flip_flop.destinations = strings.split(dst_string, ", ")
 			for d in flip_flop.destinations {
 				if d in conjunctions {
-					c := conjunctions[d]
-					c.inputs[flip_flop.name] = false
-					conjunctions[d] = c
+					c := &conjunctions[d]
+					if !(flip_flop.name in c.inputs) {
+						fmt.println(
+							"conjunction flipflop: adding",
+							flip_flop.name,
+						)
+						c.inputs[flip_flop.name] = false
+					}
+					// conjunctions[d] = c
 				}
 			}
 			modules[flip_flop.name] = flip_flop
 		} else if line[0] == '&' {
 			name := line[1:arrow]
-			conj := conjunctions[name]
-			dst_string := line[arrow + 4:]
-			conj.destinations = strings.split(dst_string, ", ")
+			conj := &conjunctions[name]
 			for d in conj.destinations {
 				if d in conjunctions {
-					c := conjunctions[d]
-					c.inputs[name] = false
-					conjunctions[d] = c
+					c := &conjunctions[d]
+					if !(name in c.inputs) {
+						fmt.println("conjunction conjunction: adding:", name)
+						c.inputs[name] = false
+					}
+					// conjunctions[d] = c
 				}
 			}
-			modules[name] = conj
+			modules[name] = conj^
 		} else {
 			broadcast: Broadcast
 			broadcast.name = line[0:arrow]
@@ -209,23 +225,34 @@ print_signal :: proc(input: Input) {
 	fmt.printf("%s %s %s\n", input.from, pulse, input.to)
 }
 
-press_button :: proc(modules: map[string]Module, times: int) -> (low, high: int) {
+press_button :: proc(
+	modules: map[string]Module,
+	times: int,
+) -> (
+	low, high: int,
+) {
 	sequence: q.Queue(Input)
 	defer q.destroy(&sequence)
 
 	// initial button pulse
 	for i := 0; i < times; i += 1 {
-		q.push(&sequence, Input{from = "button", pulse = false, to = "broadcaster"})
+		q.push(
+			&sequence,
+			Input{from = "button", pulse = false, to = "broadcaster"},
+		)
 		for q.len(sequence) != 0 {
 			input := q.pop_front(&sequence)
-			print_signal(input)
+			// print_signal(input)
 			if input.pulse do high += 1
 			else do low += 1
 			if input.to in modules {
 				#partial switch &to in &modules[input.to] {
 				case Broadcast:
 					for d in to.destinations {
-						q.push_back(&sequence, Input{from = to.name, pulse = input.pulse, to = d})
+						q.push_back(
+							&sequence,
+							Input{from = to.name, pulse = input.pulse, to = d},
+						)
 					}
 				case Conjunction:
 					to.inputs[input.from] = input.pulse
@@ -239,12 +266,18 @@ press_button :: proc(modules: map[string]Module, times: int) -> (low, high: int)
 					if all_inputs && input.pulse { 	// remembers high pulses
 						for d in to.destinations {
 							// send low pulse
-							q.push_back(&sequence, Input{from = to.name, pulse = false, to = d})
+							q.push_back(
+								&sequence,
+								Input{from = to.name, pulse = false, to = d},
+							)
 						}
 					} else { 	// remembers low pulses
 						for d in to.destinations {
 							// send high pulse
-							q.push_back(&sequence, Input{from = to.name, pulse = true, to = d})
+							q.push_back(
+								&sequence,
+								Input{from = to.name, pulse = true, to = d},
+							)
 						}
 					}
 				case Flip_Flop:
@@ -255,14 +288,25 @@ press_button :: proc(modules: map[string]Module, times: int) -> (low, high: int)
 						if to.on { 	// was off
 							for d in to.destinations {
 								// high pulse
-								q.push_back(&sequence, Input{from = to.name, pulse = true, to = d})
+								q.push_back(
+									&sequence,
+									Input {
+										from = to.name,
+										pulse = true,
+										to = d,
+									},
+								)
 							}
 						} else { 	// was on
 							for d in to.destinations {
 								// low pulse
 								q.push_back(
 									&sequence,
-									Input{from = to.name, pulse = false, to = d},
+									Input {
+										from = to.name,
+										pulse = false,
+										to = d,
+									},
 								)
 							}
 						}
@@ -270,8 +314,7 @@ press_button :: proc(modules: map[string]Module, times: int) -> (low, high: int)
 				}
 			}
 		}
-		fmt.println("low:", low, "high:", high)
+		// fmt.println("low:", low, "high:", high)
 	}
 	return
 }
-

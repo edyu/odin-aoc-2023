@@ -17,6 +17,7 @@ tasks:
 
   build:
     cmds:
+      - mkdir -p bin
       - odin build pulse -out=bin/pulse
     aliases:
       - b
