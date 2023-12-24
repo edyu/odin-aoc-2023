@@ -154,6 +154,7 @@ process_file :: proc(
 			delete(t.destinations)
 		}
 	}
+	part2 = keep_pressing_button(modules)
 
 	return part1, part2, nil
 }
@@ -300,6 +301,80 @@ press_button :: proc(modules: map[string]Module, times: int) -> (low, high: int)
 			}
 		}
 		// fmt.println("low:", low, "high:", high)
+	}
+	return
+}
+
+keep_pressing_button :: proc(modules: map[string]Module) -> (presses: int) {
+	sequence: q.Queue(Input)
+	defer q.destroy(&sequence)
+
+	// initial button pulse
+	for true {
+		presses += 1
+		q.push(&sequence, Input{from = "button", pulse = false, to = "broadcaster"})
+		for q.len(sequence) != 0 {
+			input := q.pop_front(&sequence)
+			// print_signal(input)
+			if input.to in modules {
+				#partial switch &to in &modules[input.to] {
+				case Broadcast:
+					for d in to.destinations {
+						q.push_back(&sequence, Input{from = to.name, pulse = input.pulse, to = d})
+					}
+				case Conjunction:
+					to.inputs[input.from] = input.pulse
+					all_inputs := true
+					for n in to.inputs {
+						if !to.inputs[n] {
+							all_inputs = false
+							break
+						}
+					}
+					if all_inputs && input.pulse { 	// remembers high pulses
+						for d in to.destinations {
+							// send low pulse
+							q.push_back(&sequence, Input{from = to.name, pulse = false, to = d})
+						}
+					} else { 	// remembers low pulses
+						for d in to.destinations {
+							// send high pulse
+							q.push_back(&sequence, Input{from = to.name, pulse = true, to = d})
+						}
+					}
+				case Flip_Flop:
+					if input.pulse { 	// high pulse
+						// do nothing
+					} else { 	// low pulse
+						to.on = !to.on
+						if to.on { 	// was off
+							for d in to.destinations {
+								// high pulse
+								q.push_back(&sequence, Input{from = to.name, pulse = true, to = d})
+							}
+						} else { 	// was on
+							for d in to.destinations {
+								// low pulse
+								q.push_back(
+									&sequence,
+									Input{from = to.name, pulse = false, to = d},
+								)
+							}
+						}
+					}
+				}
+			} else {
+				// fmt.println(
+				// 	"OOOPS: ",
+				// 	input.from,
+				// 	"-high->" if input.pulse else "-low->",
+				// 	input.to,
+				// )
+				if !input.pulse {
+					return presses
+				}
+			}
+		}
 	}
 	return
 }
