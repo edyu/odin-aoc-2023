@@ -137,7 +137,7 @@ process_file :: proc(
 			delete(t.destinations)
 		}
 	}
-	low, high := press_button(modules, times)
+	low, high := press_button_times(modules, times)
 	fmt.println("low:", low, "high:", high)
 	part1 = low * high
 
@@ -154,7 +154,7 @@ process_file :: proc(
 			delete(t.destinations)
 		}
 	}
-	part2 = keep_pressing_button(modules)
+	part2 = keep_pressing_button(modules2)
 
 	return part1, part2, nil
 }
@@ -232,88 +232,103 @@ print_signal :: proc(input: Input) {
 	fmt.printf("%s %s %s\n", input.from, pulse, input.to)
 }
 
-press_button :: proc(modules: map[string]Module, times: int) -> (low, high: int) {
+press_button :: proc(modules: map[string]Module) -> (low, high: int) {
 	sequence: q.Queue(Input)
 	defer q.destroy(&sequence)
 
 	// initial button pulse
-	for i := 0; i < times; i += 1 {
-		q.push(&sequence, Input{from = "button", pulse = false, to = "broadcaster"})
-		for q.len(sequence) != 0 {
-			input := q.pop_front(&sequence)
-			// print_signal(input)
-			if input.pulse do high += 1
-			else do low += 1
-			if input.to in modules {
-				#partial switch &to in &modules[input.to] {
-				case Broadcast:
+	q.push(&sequence, Input{from = "button", pulse = false, to = "broadcaster"})
+	for q.len(sequence) != 0 {
+		input := q.pop_front(&sequence)
+		// print_signal(input)
+		if input.pulse do high += 1
+		else do low += 1
+		if input.to in modules {
+			#partial switch &to in &modules[input.to] {
+			case Broadcast:
+				for d in to.destinations {
+					q.push_back(&sequence, Input{from = to.name, pulse = input.pulse, to = d})
+				}
+			case Conjunction:
+				to.inputs[input.from] = input.pulse
+				all_inputs := true
+				for n in to.inputs {
+					if !to.inputs[n] {
+						all_inputs = false
+						break
+					}
+				}
+				if all_inputs && input.pulse { 	// remembers high pulses
 					for d in to.destinations {
-						q.push_back(&sequence, Input{from = to.name, pulse = input.pulse, to = d})
+						// send low pulse
+						q.push_back(&sequence, Input{from = to.name, pulse = false, to = d})
 					}
-				case Conjunction:
-					to.inputs[input.from] = input.pulse
-					all_inputs := true
-					for n in to.inputs {
-						if !to.inputs[n] {
-							all_inputs = false
-							break
-						}
+				} else { 	// remembers low pulses
+					for d in to.destinations {
+						// send high pulse
+						q.push_back(&sequence, Input{from = to.name, pulse = true, to = d})
 					}
-					if all_inputs && input.pulse { 	// remembers high pulses
+				}
+			case Flip_Flop:
+				if input.pulse { 	// high pulse
+					// do nothing
+				} else { 	// low pulse
+					to.on = !to.on
+					if to.on { 	// was off
 						for d in to.destinations {
-							// send low pulse
-							q.push_back(&sequence, Input{from = to.name, pulse = false, to = d})
-						}
-					} else { 	// remembers low pulses
-						for d in to.destinations {
-							// send high pulse
+							// high pulse
 							q.push_back(&sequence, Input{from = to.name, pulse = true, to = d})
 						}
-					}
-				case Flip_Flop:
-					if input.pulse { 	// high pulse
-						// do nothing
-					} else { 	// low pulse
-						to.on = !to.on
-						if to.on { 	// was off
-							for d in to.destinations {
-								// high pulse
-								q.push_back(&sequence, Input{from = to.name, pulse = true, to = d})
-							}
-						} else { 	// was on
-							for d in to.destinations {
-								// low pulse
-								q.push_back(
-									&sequence,
-									Input{from = to.name, pulse = false, to = d},
-								)
-							}
+					} else { 	// was on
+						for d in to.destinations {
+							// low pulse
+							q.push_back(&sequence, Input{from = to.name, pulse = false, to = d})
 						}
 					}
 				}
-			} else {
-				// fmt.println(
-				// 	"OOOPS: ",
-				// 	input.from,
-				// 	"-high->" if input.pulse else "-low->",
-				// 	input.to,
-				// )
 			}
+		} else {
+			// fmt.println(
+			// 	"OOOPS: ",
+			// 	input.from,
+			// 	"-high->" if input.pulse else "-low->",
+			// 	input.to,
+			// )
 		}
-		// fmt.println("low:", low, "high:", high)
+	}
+	// fmt.println("low:", low, "high:", high)
+	return
+}
+
+press_button_times :: proc(modules: map[string]Module, times: int) -> (low, high: int) {
+	for i := 0; i < times; i += 1 {
+		l, h := press_button(modules)
+		low += l
+		high += h
 	}
 	return
 }
 
 keep_pressing_button :: proc(modules: map[string]Module) -> (presses: int) {
+	exit := "zh"
+	end := modules[exit]
+	counts: map[string]int
+	defer delete(counts)
+	#partial switch e in end {
+	case Conjunction:
+		for i in e.inputs {
+			counts[i] = 0
+		}
+	}
+
 	sequence: q.Queue(Input)
 	defer q.destroy(&sequence)
 
 	// initial button pulse
-	for true {
+	outer: for true {
 		presses += 1
 		q.push(&sequence, Input{from = "button", pulse = false, to = "broadcaster"})
-		for q.len(sequence) != 0 {
+		inner: for q.len(sequence) != 0 {
 			input := q.pop_front(&sequence)
 			// print_signal(input)
 			if input.to in modules {
@@ -337,6 +352,21 @@ keep_pressing_button :: proc(modules: map[string]Module) -> (presses: int) {
 							q.push_back(&sequence, Input{from = to.name, pulse = false, to = d})
 						}
 					} else { 	// remembers low pulses
+						if to.name == exit && input.pulse {
+							if counts[input.from] == 0 {
+								counts[input.from] = presses
+							}
+							done := true
+							for i in counts {
+								if counts[i] == 0 {
+									done = false
+									break
+								}
+							}
+							if done {
+								break outer
+							}
+						}
 						for d in to.destinations {
 							// send high pulse
 							q.push_back(&sequence, Input{from = to.name, pulse = true, to = d})
@@ -364,18 +394,27 @@ keep_pressing_button :: proc(modules: map[string]Module) -> (presses: int) {
 					}
 				}
 			} else {
+				// fmt.println(counts)
 				// fmt.println(
 				// 	"OOOPS: ",
 				// 	input.from,
 				// 	"-high->" if input.pulse else "-low->",
 				// 	input.to,
 				// )
+				// brute force, shouldn't be reached before breaking the loop
 				if !input.pulse {
 					return presses
 				}
 			}
 		}
 	}
-	return
+
+	fmt.println(counts)
+	presses = 1
+	for i in counts {
+		presses = math.lcm(presses, counts[i])
+	}
+
+	return presses
 }
 
