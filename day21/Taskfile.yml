@@ -1,0 +1,30 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task: run
+
+  run:
+    deps:
+      - build
+    cmds:
+      - bin/step {{.CLI_ARGS}}
+    aliases:
+      - r
+    silent: true
+    method: none
+
+  build:
+    cmds:
+      - mkdir -p bin
+      - odin build step -o:speed -out=bin/step
+    aliases:
+      - b
+    silent: true
+    sources:
+      - './step/**/*.odin'
+    generates:
+      - bin/step
+
+interval: 250ms
