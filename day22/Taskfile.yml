@@ -1,0 +1,30 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task: run
+
+  run:
+    deps:
+      - build
+    cmds:
+      - bin/sand {{.CLI_ARGS}}
+    aliases:
+      - r
+    silent: true
+    method: none
+
+  build:
+    cmds:
+      - mkdir -p bin
+      - odin build sand -o:speed -out=bin/sand
+    aliases:
+      - b
+    silent: true
+    sources:
+      - './sand/**/*.odin'
+    generates:
+      - bin/sand
+
+interval: 250ms
