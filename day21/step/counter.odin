@@ -40,19 +40,13 @@ main :: proc() {
 
 	defer {
 		if len(track.allocation_map) > 0 {
-			fmt.eprintf(
-				"=== %v allocations not freed: ===\n",
-				len(track.allocation_map),
-			)
+			fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
 			for _, entry in track.allocation_map {
 				fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
 			}
 		}
 		if len(track.bad_free_array) > 0 {
-			fmt.eprintf(
-				"=== %v incorrect frees: ===\n",
-				len(track.bad_free_array),
-			)
+			fmt.eprintf("=== %v incorrect frees: ===\n", len(track.bad_free_array))
 			for entry in track.bad_free_array {
 				fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
 			}
@@ -119,15 +113,16 @@ process_file :: proc(
 
 	fmt.println("part1:", part1)
 
-	plots: [dynamic][2]int
-	append(&plots, [2]int{0, 0})
-	for i := 0; i < steps2; i += 1 {
-		plots = step_garden(lines, plots)
-		// fmt.println(i, plots)
-	}
-	defer delete(plots)
+	// plots: [dynamic][2]int
+	// append(&plots, [2]int{0, 0})
+	// for i := 0; i < steps2; i += 1 {
+	// 	plots = step_garden(lines, plots)
+	// 	// fmt.println(i, plots)
+	// }
+	// defer delete(plots)
 
-	part2 = len(plots)
+	// part2 = len(plots)
+	part2 = calculate_steps(lines, steps2, len(lines), len(lines) / 2)
 
 	return
 }
@@ -218,12 +213,7 @@ take_a_step :: proc(garden: [][]u8) {
 	}
 }
 
-step_garden :: proc(
-	lines: []string,
-	current: [dynamic][2]int,
-) -> (
-	plots: [dynamic][2]int,
-) {
+step_garden :: proc(lines: []string, current: [dynamic][2]int) -> (plots: [dynamic][2]int) {
 	defer delete(current)
 
 	for c in current {
@@ -255,3 +245,53 @@ step_garden :: proc(
 
 	return
 }
+
+get_steps :: proc(lines: []string, steps: int) -> (count: int) {
+	plots: [dynamic][2]int
+	append(&plots, [2]int{0, 0})
+	for i := 0; i < steps; i += 1 {
+		plots = step_garden(lines, plots)
+	}
+	defer delete(plots)
+
+	return len(plots)
+}
+
+// use part1 to calculate steps after 65, 196, and 327 steps
+// as it's 65 + n * 131 = 26501365 and n = 202300
+calculate_steps :: proc(
+	lines: []string,
+	steps: int = 26501365,
+	size: int = 131,
+	edge: int = 65,
+) -> (
+	plots: int,
+) {
+	// 65
+	// A :: 3884
+	// 65 + 131 = 196 
+	// B :: 34564
+	// 65 + 2 * 131 = 327
+	// C :: 95816
+	A := get_steps(lines, 65)
+	fmt.println("A:", A)
+	B := get_steps(lines, 196)
+	fmt.println("B:", B)
+	C := get_steps(lines, 327)
+	fmt.println("C:", C)
+
+	a := (A - 2 * B + C) / 2
+	fmt.println("a:", a)
+	b := B - A - a
+	fmt.println("b:", b)
+	c := A
+	fmt.println("c:", c)
+
+	n := (steps - edge) / size
+	fmt.println("n:", n)
+
+	plots = a * n * n + b * n + c
+
+	return plots
+}
+
