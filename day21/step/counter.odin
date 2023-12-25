@@ -40,13 +40,19 @@ main :: proc() {
 
 	defer {
 		if len(track.allocation_map) > 0 {
-			fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
+			fmt.eprintf(
+				"=== %v allocations not freed: ===\n",
+				len(track.allocation_map),
+			)
 			for _, entry in track.allocation_map {
 				fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
 			}
 		}
 		if len(track.bad_free_array) > 0 {
-			fmt.eprintf("=== %v incorrect frees: ===\n", len(track.bad_free_array))
+			fmt.eprintf(
+				"=== %v incorrect frees: ===\n",
+				len(track.bad_free_array),
+			)
 			for entry in track.bad_free_array {
 				fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
 			}
@@ -56,15 +62,17 @@ main :: proc() {
 	arguments := os.args[1:]
 
 	if len(arguments) < 1 {
-		fmt.printf("Usage: %s <file> [<times>]\n", os.args[0])
+		fmt.printf("Usage: %s <file> [<steps> <steps2>]\n", os.args[0])
 		os.exit(1)
 	}
 	filename := arguments[0]
 	steps := 64
+	steps2 := 26501365
 	if len(arguments) > 1 do steps = strconv.atoi(arguments[1])
+	if len(arguments) > 2 do steps2 = strconv.atoi(arguments[2])
 
 	time_start := time.tick_now()
-	part1, part2, error := process_file(filename, steps)
+	part1, part2, error := process_file(filename, steps, steps2)
 	time_took := time.tick_since(time_start)
 	// memory_used := arena.peak_used
 	if error != nil {
@@ -79,6 +87,7 @@ main :: proc() {
 process_file :: proc(
 	filename: string,
 	steps: int = 64,
+	steps2: int = 26501365,
 ) -> (
 	part1: int,
 	part2: int,
@@ -104,9 +113,21 @@ process_file :: proc(
 		reset_steps(garden)
 	}
 
-	print_garden(garden)
+	// print_garden(garden)
 
 	part1 = count_plots(garden)
+
+	fmt.println("part1:", part1)
+
+	plots: [dynamic][2]int
+	append(&plots, [2]int{0, 0})
+	for i := 0; i < steps2; i += 1 {
+		plots = step_garden(lines, plots)
+		// fmt.println(i, plots)
+	}
+	defer delete(plots)
+
+	part2 = len(plots)
 
 	return
 }
@@ -121,6 +142,18 @@ parse_garden :: proc(lines: []string) -> (garden: [][]u8) {
 	}
 
 	return
+}
+
+get_plot :: proc(lines: []string, x, y: int) -> (plot: u8) {
+	center_x := len(lines) / 2
+	center_y := len(lines[0]) / 2
+
+	coord_x := (x + center_x) % len(lines)
+	coord_y := (y + center_y) % len(lines[0])
+	if coord_x < 0 do coord_x += len(lines)
+	if coord_y < 0 do coord_y += len(lines[0])
+
+	return lines[coord_x][coord_y]
 }
 
 print_garden :: proc(garden: [][]u8) {
@@ -185,3 +218,40 @@ take_a_step :: proc(garden: [][]u8) {
 	}
 }
 
+step_garden :: proc(
+	lines: []string,
+	current: [dynamic][2]int,
+) -> (
+	plots: [dynamic][2]int,
+) {
+	defer delete(current)
+
+	for c in current {
+		if get_plot(lines, c.x + 1, c.y) != '#' {
+			plot := [2]int{c.x + 1, c.y}
+			if !slice.contains(plots[:], plot) {
+				append(&plots, plot)
+			}
+		}
+		if get_plot(lines, c.x - 1, c.y) != '#' {
+			plot := [2]int{c.x - 1, c.y}
+			if !slice.contains(plots[:], plot) {
+				append(&plots, plot)
+			}
+		}
+		if get_plot(lines, c.x, c.y + 1) != '#' {
+			plot := [2]int{c.x, c.y + 1}
+			if !slice.contains(plots[:], plot) {
+				append(&plots, plot)
+			}
+		}
+		if get_plot(lines, c.x, c.y - 1) != '#' {
+			plot := [2]int{c.x, c.y - 1}
+			if !slice.contains(plots[:], plot) {
+				append(&plots, plot)
+			}
+		}
+	}
+
+	return
+}
