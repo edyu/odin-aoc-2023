@@ -40,13 +40,19 @@ main :: proc() {
 
 	defer {
 		if len(track.allocation_map) > 0 {
-			fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
+			fmt.eprintf(
+				"=== %v allocations not freed: ===\n",
+				len(track.allocation_map),
+			)
 			for _, entry in track.allocation_map {
 				fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
 			}
 		}
 		if len(track.bad_free_array) > 0 {
-			fmt.eprintf("=== %v incorrect frees: ===\n", len(track.bad_free_array))
+			fmt.eprintf(
+				"=== %v incorrect frees: ===\n",
+				len(track.bad_free_array),
+			)
 			for entry in track.bad_free_array {
 				fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
 			}
@@ -74,7 +80,18 @@ main :: proc() {
 	// fmt.printf("memory used %v bytes\n", memory_used)
 }
 
-process_file :: proc(filename: string) -> (part1: int, part2: int, err: Brick_Error) {
+Brick :: struct {
+	x, y, z:             int,
+	x_len, y_len, z_len: int,
+}
+
+process_file :: proc(
+	filename: string,
+) -> (
+	part1: int,
+	part2: int,
+	err: Brick_Error,
+) {
 	data, ok := os.read_entire_file(filename)
 	if !ok {
 		return 0, 0, Unable_To_Read_File{filename = filename}
@@ -86,6 +103,41 @@ process_file :: proc(filename: string) -> (part1: int, part2: int, err: Brick_Er
 	defer delete(lines)
 	if lines[len(lines) - 1] == "" do lines = lines[0:len(lines) - 1]
 
+	bricks := parse_bricks(lines)
+	defer delete(bricks)
+
+	for b in bricks {
+		fmt.println(b)
+	}
+
 	return
 }
 
+parse_bricks :: proc(lines: []string) -> (bricks: []Brick) {
+	bricks = make([]Brick, len(lines))
+	for l, i in lines {
+		values := strings.split_multi(l, {"~", ","})
+		defer delete(values)
+		assert(len(values) == 6)
+		x := strconv.atoi(values[0])
+		y := strconv.atoi(values[1])
+		z := strconv.atoi(values[2])
+		x2 := strconv.atoi(values[3])
+		y2 := strconv.atoi(values[4])
+		z2 := strconv.atoi(values[5])
+		brick := Brick{x, y, z, x2 - x + 1, y2 - y + 1, z2 - z + 1}
+		bricks[i] = brick
+	}
+	return bricks
+}
+
+has_dependency :: proc(bricks: []Brick, i: int) -> (yes: int) {
+	for j := i + 1; j < len(bricks); j += 1 {
+		if on_top(bricks[i], bricks[j]) do return 1
+	}
+	return 0
+}
+
+on_top :: proc(a, b: Brick) -> bool {
+	return false
+}
