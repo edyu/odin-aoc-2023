@@ -156,6 +156,59 @@ process_file :: proc(filename: string) -> (part1: int, part2: int, err: Brick_Er
 		}
 	}
 
+	deps: map[int][dynamic]int
+	defer delete(deps)
+	defer for _, v in deps do delete(v)
+	for k, v in supports {
+		for d in v {
+			if !(d in deps) do deps[d] = make([dynamic]int)
+			existing := &deps[d]
+			if !slice.contains(existing[:], k) {
+				append(existing, k)
+			}
+		}
+	}
+
+	// for k, v in deps {
+	// 	fmt.printf("deps[%d]=", k)
+	// 	if len(v) == 0 do fmt.printf("[]\n")
+	// 	else {
+	// 		fmt.printf("[ ")
+	// 		for n in v {
+	// 			fmt.printf("%d ", n)
+	// 		}
+	// 		fmt.printf("]\n")
+	// 	}
+	// }
+
+	fallen: map[int]bool
+	defer delete(fallen)
+
+	for a in bricks {
+		clear(&fallen)
+		// add a first in case b depends on a
+		fallen[a.order] = true
+		middle2: for b in bricks {
+			if a != b {
+				if a.coord.z + a.len.z <= b.coord.z {
+					// add b if everything b depends on is also fallen 
+					if b.order in deps {
+						for k in deps[b.order] {
+							if !(k in fallen) {
+								// if there is another support then it's not fallen
+								continue middle2
+							}
+						}
+					}
+					fallen[b.order] = true
+				}
+			}
+		}
+
+		// remove the extra count from a itself
+		part2 += len(fallen) - 1
+	}
+
 	return
 }
 
