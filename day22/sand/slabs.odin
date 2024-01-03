@@ -97,17 +97,11 @@ process_file :: proc(filename: string) -> (part1: int, part2: int, err: Brick_Er
 
 	slice.sort_by(bricks, proc(a, b: Brick) -> bool {return a.coord.z < b.coord.z})
 
-	// fmt.println("after sort")
-	// for i := 0; i < len(bricks); i += 1 {
-	// 	fmt.printf("%c: %v\n", bricks[i].order + 'A', bricks[i])
-	// }
-
 	supports: map[int][dynamic]int
 	defer delete(supports)
 	defer for _, v in supports do delete(v)
 	for i := 0; i < len(bricks); i += 1 {
 		deps := let_it_fall(bricks, i)
-		// fmt.printf("%c found deps: %v\n", bricks[i].order + 'A', deps)
 		defer delete(deps)
 		for d in deps {
 			if !(d in supports) do supports[d] = make([dynamic]int)
@@ -118,56 +112,46 @@ process_file :: proc(filename: string) -> (part1: int, part2: int, err: Brick_Er
 		}
 	}
 
-	// fmt.println("after falling down")
+	// slice.sort_by(bricks, proc(a, b: Brick) -> bool {return a.coord.z < b.coord.z})
 
-	slice.sort_by(bricks, proc(a, b: Brick) -> bool {return a.coord.z < b.coord.z})
-
-	// for i := 0; i < len(bricks); i += 1 {
-	// 	fmt.printf("%c: %v\n", bricks[i].order + 'A', bricks[i])
+	// for k, v in supports {
+	// 	slice.sort(supports[k][:])
+	// fmt.printf("supports[%d]=", k)
+	// if len(v) == 0 do fmt.printf("[]\n")
+	// else {
+	// 	fmt.printf("[ ")
+	// 	for n in v {
+	// 		fmt.printf("%d ", n)
+	// 	}
+	// 	fmt.printf("]\n")
 	// }
-
-	for k, v in supports {
-		slice.sort(supports[k][:])
-		fmt.printf("supports[%c]=", k + 'A')
-		if len(v) == 0 do fmt.printf("[]\n")
-		else {
-			fmt.printf("[ ")
-			for n in v {
-				fmt.printf("%c ", n + 'A')
-			}
-			fmt.printf("]\n")
-		}
-	}
+	// }
 
 	outer: for k, v in supports {
 		if len(v) > 0 {
-			// fmt.printf("checking %c\n", k + 'A')
 			middle: for i in v {
-				// fmt.printf("trying to find %c\n", i + 'A')
 				found := false
 				inner: for j, u in supports {
-					// fmt.printf("against %v\n", u)
 					if j != k {
 						if slice.contains(u[:], i) {
-							// fmt.printf("found at %c\n", j + 'A')
 							found = true
 							break inner
 						}
 					}
 				}
 				if !found {
-					// fmt.printf("%c not found\n", i + 'A')
 					continue outer
 				}
 			}
-			// fmt.printf("%c is not the only support\n", k + 'A')
+			// b := get_brick(bricks, k)
+			// fmt.printf("%d, %v is not the only support\n", k, b)
 			part1 += 1
 		}
 	}
 
 	for i := 0; i < len(bricks); i += 1 {
-		if !(i in supports) {
-			// fmt.printf("%c doesn't support anything\n", i + 'A')
+		if !(bricks[i].order in supports) {
+			// fmt.printf("%d: %v doesn't support anything\n", bricks[i].order, bricks[i])
 			part1 += 1
 		}
 	}
@@ -193,33 +177,37 @@ parse_bricks :: proc(lines: []string) -> (bricks: []Brick) {
 	return bricks
 }
 
+get_brick :: proc(bricks: []Brick, i: int) -> Brick {
+	for b in bricks {
+		if b.order == i do return b
+	}
+
+	// won't happen
+	return bricks[0]
+}
+
 let_it_fall :: proc(bricks: []Brick, i: int) -> (deps: [dynamic]int) {
 	if i == 0 && bricks[0].coord.z == 1 do return
 	bricks[i].coord.z = 1
-	// if bricks[i].order == 18 do fmt.printf("processing %c\n", bricks[i].order + 'A')
 	for j := i - 1; j >= 0; j -= 1 {
-		// if bricks[i].order == 18 do fmt.printf("checking against %c\n", bricks[j].order + 'A')
 		if on_top(bricks[i], bricks[j]) {
-			// if bricks[i].order == 18 do fmt.printf("on top of %c\n", bricks[j].order + 'A')
-			// if bricks[i].order == 18 do fmt.printf("%v\n", bricks[j])
 			bricks[i].coord.z = bricks[j].coord.z + bricks[j].len.z
-			// if bricks[i].order == 18 do fmt.printf("z is %d\n", bricks[i].coord.z)
-			append(&deps, bricks[j].order)
+			if !slice.contains(deps[:], bricks[j].order) do append(&deps, bricks[j].order)
 			for k := j - 1; k >= 0; k -= 1 {
 				if on_top(bricks[i], bricks[k]) {
-					// if bricks[i].order == 18 do fmt.printf("also on top of %v\n", bricks[k])
 					if bricks[k].coord.z + bricks[k].len.z == bricks[i].coord.z {
-						append(&deps, bricks[k].order)
+						if !slice.contains(deps[:], bricks[k].order) do append(&deps, bricks[k].order)
 					} else if bricks[k].coord.z + bricks[k].len.z > bricks[i].coord.z {
 						// update to higher z
 						bricks[i].coord.z = bricks[k].coord.z + bricks[k].len.z
 						// need to remove wrongly added earlier bricks
-						for d := 0; d < len(deps); d += 1 {
-							if bricks[d].coord.z + bricks[d].len.z < bricks[i].coord.z {
+						#reverse for _, d in deps {
+							b := get_brick(bricks, deps[d])
+							if b.coord.z + b.len.z < bricks[i].coord.z {
 								unordered_remove(&deps, d)
 							}
 						}
-						append(&deps, bricks[k].order)
+						if !slice.contains(deps[:], bricks[k].order) do append(&deps, bricks[k].order)
 					}
 				}
 			}
