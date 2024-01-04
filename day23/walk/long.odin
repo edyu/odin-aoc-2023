@@ -92,10 +92,21 @@ process_file :: proc(filename: string) -> (part1: int, part2: int, err: Trail_Er
 	empty: [dynamic]Coord
 	path, found := longest_hike(lines, empty, start)
 	defer delete(path)
-	fmt.println("path:", path)
+	// fmt.println("path:", path)
 	if found {
+		fmt.println("end:", path[len(path) - 1])
 		part1 = len(path) - 1
 	}
+	fmt.println("part1:", part1)
+
+	path2: [dynamic]Coord
+	defer delete(path2)
+	length2, found2 := longest_climb(lines, &path2, start)
+	// fmt.println("len2:", len(path2))
+	if found2 {
+		part2 = length2 - 1
+	}
+	fmt.println("path2:", path2)
 
 	return
 }
@@ -110,11 +121,15 @@ parse_start :: proc(line: string) -> (start: Coord) {
 }
 
 in_path :: proc(path1, path2: [dynamic]Coord, row, col: int) -> bool {
-	for t in path1 {
-		if t.x == row && t.y == col do return true
-	}
-	for t in path2 {
-		if t.x == row && t.y == col do return true
+	if visited(path1, row, col) do return true
+	if visited(path2, row, col) do return true
+
+	return false
+}
+
+visited :: proc(path: [dynamic]Coord, row, col: int) -> bool {
+	for p in path {
+		if p.x == row && p.y == col do return true
 	}
 	return false
 }
@@ -132,13 +147,11 @@ valid_tile :: proc(lines: []string, row, col: int) -> bool {
 longest_hike :: proc(
 	lines: []string,
 	existing: [dynamic]Coord,
-	start: Coord,
+	current: Coord,
 ) -> (
 	path: [dynamic]Coord,
 	ok: bool,
 ) {
-	current := start
-
 	append(&path, current)
 	// found the end
 	if current.x == len(lines) - 1 do return path, true
@@ -232,5 +245,95 @@ longest_hike :: proc(
 		defer for p in paths do delete(p)
 		return path, true
 	} else do return path, false
+}
+
+longest_climb :: proc(
+	lines: []string,
+	sofar: ^[dynamic]Coord,
+	start: Coord,
+) -> (
+	length: int,
+	ok: bool,
+) {
+	current := start
+
+	// found the end
+	if current.x == len(lines) - 1 {
+		append(sofar, current)
+		return len(sofar^), true
+	}
+
+	possible_paths: [dynamic]Coord
+	defer delete(possible_paths)
+	if lines[current.x][current.y] != '#' {
+		if valid_tile(lines, current.x - 1, current.y) &&
+		   !visited(sofar^, current.x - 1, current.y) {
+			append(&possible_paths, Coord{current.x - 1, current.y})
+		}
+		if valid_tile(lines, current.x + 1, current.y) &&
+		   !visited(sofar^, current.x + 1, current.y) {
+			append(&possible_paths, Coord{current.x + 1, current.y})
+		}
+		if valid_tile(lines, current.x, current.y - 1) &&
+		   !visited(sofar^, current.x, current.y - 1) {
+			append(&possible_paths, Coord{current.x, current.y - 1})
+		}
+		if valid_tile(lines, current.x, current.y + 1) &&
+		   !visited(sofar^, current.x, current.y + 1) {
+			append(&possible_paths, Coord{current.x, current.y + 1})
+		}
+	}
+
+	switch len(possible_paths) {
+	case 0:
+		pop(sofar)
+		return 0, false
+	case 1:
+		append(sofar, current)
+		length, ok = longest_climb(lines, sofar, possible_paths[0])
+		if ok {
+			return length, ok
+		} else {
+			pop(sofar)
+			return 0, false
+		}
+	case 2:
+		fallthrough
+	case 3:
+		fallthrough
+	case 4:
+		longest := 0
+		path: [dynamic]Coord
+
+		append(sofar, current)
+
+		for p in possible_paths {
+			clone: [dynamic]Coord
+			for s in sofar {
+				append(&clone, s)
+			}
+			length, ok = longest_climb(lines, &clone, p)
+			if ok && length > longest {
+				longest = length
+				delete(path)
+				path = clone
+			} else {
+				defer delete(clone)
+			}
+		}
+		if longest > 0 {
+			// fmt.println("longest is", longest)
+			defer delete(path)
+			for i := len(sofar^); i < len(path); i += 1 {
+				append(sofar, path[i])
+			}
+			return longest, true
+		} else {
+			pop(sofar)
+			return 0, false
+		}
+	}
+
+	return
 }
 
