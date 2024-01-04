@@ -1,0 +1,30 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task: run
+
+  run:
+    deps:
+      - build
+    cmds:
+      - bin/walk {{.CLI_ARGS}}
+    aliases:
+      - r
+    silent: true
+    method: none
+
+  build:
+    cmds:
+      - mkdir -p bin
+      - odin build walk -o:speed -out=bin/walk
+    aliases:
+      - b
+    silent: true
+    sources:
+      - './walk/**/*.odin'
+    generates:
+      - bin/walk
+
+interval: 250ms
