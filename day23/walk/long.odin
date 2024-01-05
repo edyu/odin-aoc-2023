@@ -90,23 +90,43 @@ process_file :: proc(filename: string) -> (part1: int, part2: int, err: Trail_Er
 	fmt.println("start:", start)
 
 	empty: [dynamic]Coord
-	path, found := longest_hike(lines, empty, start)
+	path, _ := longest_hike(lines, empty, start)
 	defer delete(path)
 	// fmt.println("path:", path)
-	if found {
-		fmt.println("end:", path[len(path) - 1])
-		part1 = len(path) - 1
-	}
+	end := path[len(path) - 1]
+	fmt.println("end:", path[len(path) - 1])
+	part1 = len(path) - 1
 	fmt.println("part1:", part1)
 
-	path2: [dynamic]Coord
-	defer delete(path2)
-	length2, found2 := longest_climb(lines, &path2, start)
-	// fmt.println("len2:", len(path2))
-	if found2 {
-		part2 = length2 - 1
-	}
-	fmt.println("path2:", path2)
+	// path2: [dynamic]Coord
+	// defer delete(path2)
+	// length2, found2 := longest_climb(lines, &path2, start)
+	// // fmt.println("len2:", len(path2))
+	// if found2 {
+	// 	part2 = length2 - 1
+	// }
+	// fmt.println("path2:", path2)
+
+	cross, next := parse_cross_tiles(lines, start, end)
+	defer delete(cross)
+	defer delete(next)
+	defer for n in next do delete(next[n])
+
+	// fmt.println("cross:", cross)
+	// fmt.println("next:", next)
+
+	graph := create_graph(cross[:], next)
+	defer delete(graph)
+	defer for g in graph do delete(graph[g])
+
+	// fmt.println("graph:", graph)
+
+	visited := make(map[Coord]bool)
+	defer delete(visited)
+	visited[start] = true
+	lengths := traverse(graph, start, end, &visited, 0)
+	defer delete(lengths)
+	part2 = slice.max(lengths[:])
 
 	return
 }
@@ -331,6 +351,127 @@ longest_climb :: proc(
 		} else {
 			pop(sofar)
 			return 0, false
+		}
+	}
+
+	return
+}
+
+parse_cross_tiles :: proc(
+	lines: []string,
+	start, end: Coord,
+) -> (
+	cross_tiles: [dynamic]Coord,
+	next_tiles: map[Coord][]Coord,
+) {
+	append(&cross_tiles, start)
+	append(&cross_tiles, end)
+	next_tiles = make(map[Coord][]Coord)
+
+	for i := 0; i < len(lines); i += 1 {
+		for j := 0; j < len(lines[0]); j += 1 {
+			if lines[i][j] != '#' {
+				next: [dynamic]Coord
+				if valid_tile(lines, i - 1, j) {
+					append(&next, Coord{i - 1, j})
+				}
+				if valid_tile(lines, i + 1, j) {
+					append(&next, Coord{i + 1, j})
+				}
+				if valid_tile(lines, i, j - 1) {
+					append(&next, Coord{i, j - 1})
+				}
+				if valid_tile(lines, i, j + 1) {
+					append(&next, Coord{i, j + 1})
+				}
+				next_tiles[Coord{i, j}] = next[:]
+				if len(next) > 2 {
+					append(&cross_tiles, Coord{i, j})
+				}
+			}
+		}
+	}
+
+	return
+}
+
+calculate_distance :: proc(
+	cross_tiles: []Coord,
+	next_tiles: map[Coord][]Coord,
+	cur_tile: Coord,
+	cur_dist: int,
+	visited: ^map[Coord]bool,
+) -> (
+	tile: Coord,
+	dist: int,
+) {
+	// fmt.println("calculating distance for", cur_tile, cur_dist)
+	if slice.contains(cross_tiles, cur_tile) do return cur_tile, cur_dist
+
+	for t in next_tiles[cur_tile] {
+		if !visited[t] {
+			// fmt.println("not visited", t)
+			visited[cur_tile] = true
+			return calculate_distance(cross_tiles, next_tiles, t, cur_dist + 1, visited)
+		}
+	}
+
+	// dead-end
+	return
+}
+
+Tile_Distance :: struct {
+	tile:     Coord,
+	distance: int,
+}
+
+create_graph :: proc(
+	cross_tiles: []Coord,
+	next_tiles: map[Coord][]Coord,
+) -> (
+	graph: map[Coord][dynamic]Tile_Distance,
+) {
+	for c in cross_tiles {
+		// fmt.println("graph:", c)
+		for n in next_tiles[c] {
+			visited := make(map[Coord]bool)
+			defer delete(visited)
+			visited[c] = true
+			t, d := calculate_distance(cross_tiles, next_tiles, n, 1, &visited)
+			// fmt.println("td:", t, d)
+			if d != 0 {
+				if c not_in graph do graph[c] = make([dynamic]Tile_Distance)
+				td := &graph[c]
+				append(td, Tile_Distance{t, d})
+			}
+		}
+	}
+
+	return
+}
+
+traverse :: proc(
+	graph: map[Coord][dynamic]Tile_Distance,
+	start, end: Coord,
+	visited: ^map[Coord]bool,
+	length: int,
+) -> (
+	distances: [dynamic]int,
+) {
+	if start == end {
+		append(&distances, length)
+	} else {
+		for td in graph[start] {
+			if !visited[td.tile] {
+				visited[td.tile] = true
+				// continue to next segment
+				sub_distances := traverse(graph, td.tile, end, visited, length + td.distance)
+				defer delete(sub_distances)
+				for d in sub_distances {
+					append(&distances, d)
+				}
+				delete_key(visited, td.tile)
+			}
 		}
 	}
 
