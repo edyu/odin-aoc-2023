@@ -1,0 +1,30 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task: run
+
+  run:
+    deps:
+      - build
+    cmds:
+      - bin/odds {{.CLI_ARGS}}
+    aliases:
+      - r
+    silent: true
+    method: none
+
+  build:
+    cmds:
+      - mkdir -p bin
+      - odin build odds -o:speed -out=bin/odds
+    aliases:
+      - b
+    silent: true
+    sources:
+      - './odds/**/*.odin'
+    generates:
+      - bin/odds
+
+interval: 250ms
