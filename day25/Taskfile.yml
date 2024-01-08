@@ -1,0 +1,30 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task: run
+
+  run:
+    deps:
+      - build
+    cmds:
+      - bin/snowverload {{.CLI_ARGS}}
+    aliases:
+      - r
+    silent: true
+    method: none
+
+  build:
+    cmds:
+      - mkdir -p bin
+      - odin build snowverload -o:speed -out=bin/snowverload
+    aliases:
+      - b
+    silent: true
+    sources:
+      - './snowverload/**/*.odin'
+    generates:
+      - bin/snowverload
+
+interval: 250ms

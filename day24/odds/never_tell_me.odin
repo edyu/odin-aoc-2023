@@ -5,6 +5,7 @@ import "core:fmt"
 import "core:log"
 import "core:math"
 import "core:math/big"
+import "core:math/fixed"
 import "core:math/rand"
 import "core:mem"
 import "core:os"
@@ -12,6 +13,8 @@ import "core:slice"
 import "core:strconv"
 import "core:strings"
 import "core:time"
+
+Big_Float :: distinct fixed.Fixed(i64, 20)
 
 Snow_Making_Error :: union {
 	Unable_To_Read_File,
@@ -93,6 +96,29 @@ main :: proc() {
 	fmt.printf("answer: part1 = %d part2 = %d\n", part1, part2)
 	fmt.printf("time took %v\n", time_took)
 	// fmt.printf("memory used %v bytes\n", memory_used)
+	// a, b: Big_Float
+	// fixed.init_from_f64(&a, 1)
+	// fixed.init_from_f64(&b, -2)
+	// c := fixed.div(a, b)
+	// fmt.println(
+	// 	"fixed.div(",
+	// 	print_fixed(a),
+	// 	",",
+	// 	print_fixed(b),
+	// 	")=",
+	// 	print_fixed(c),
+	// )
+	// c = fixed_div(a, b)
+	// fmt.println(print_fixed(a), "/", print_fixed(b), "=", print_fixed(c))
+	// fixed.init_from_f64(&a, 3.999999997987)
+	// fmt.println("fixed.round(", print_fixed(a), ")=", fixed.round(a))
+	// fmt.println("fixed.ceil(", print_fixed(a), ")=", fixed.ceil(a))
+	// fmt.println("fixed.floor(", print_fixed(a), ")=", fixed.floor(a))
+	// fixed.init_from_f64(&b, -2.00000001)
+	// c = fixed_round(a)
+	// fmt.println("rounded(", print_fixed(a), ")=", print_fixed(c))
+	// c = fixed_round(b)
+	// fmt.println("rounded(", print_fixed(b), ")=", print_fixed(c))
 }
 
 process_file :: proc(
@@ -147,6 +173,13 @@ process_file :: proc(
 	} else {
 		fmt.println("no solution; choose another set of stones")
 	}
+
+	// solution, found := position_stone_fixed(hailstones)
+	// if found {
+	// 	fmt.println(solution)
+	// 	sum := solution.position.x + solution.position.y + solution.position.z
+	// 	fmt.println("fixed.part2:", sum)
+	// }
 	// 886858737029295
 	// for !solved {
 	// 	x := rand.int_max(len(hailstones))
@@ -241,9 +274,25 @@ intersects :: proc(a, b: Hailstone, min_pos, max_pos: int) -> bool {
 	return false
 }
 
+BF_Hailstone :: struct {
+	position: [3]Big_Float,
+	velocity: [3]Big_Float,
+}
+
 Bigstone :: struct {
 	position: [3]big.Int,
 	velocity: [3]big.Int,
+}
+
+to_bf_hailstone :: proc(hailstone: Hailstone) -> (bigstone: BF_Hailstone) {
+	fixed.init_from_f64(&bigstone.position.x, hailstone.position.x)
+	fixed.init_from_f64(&bigstone.position.y, hailstone.position.y)
+	fixed.init_from_f64(&bigstone.position.z, hailstone.position.z)
+	fixed.init_from_f64(&bigstone.velocity.x, hailstone.velocity.x)
+	fixed.init_from_f64(&bigstone.velocity.y, hailstone.velocity.y)
+	fixed.init_from_f64(&bigstone.velocity.z, hailstone.velocity.z)
+
+	return
 }
 
 to_bigstone :: proc(hailstone: Hailstone) -> (bigstone: Bigstone) {
@@ -381,6 +430,273 @@ position_stone_float :: proc(
 	return
 }
 
+position_stone_fixed :: proc(
+	hailstones: []Hailstone,
+) -> (
+	stone: Hailstone,
+	solved: bool,
+) {
+	a := to_bf_hailstone(hailstones[0])
+	b := to_bf_hailstone(hailstones[1])
+	c := to_bf_hailstone(hailstones[2])
+
+	// equation 1: lines 0 and 1, x and y only
+	m1a := fixed.sub(a.velocity.y, b.velocity.y)
+	m1b := fixed.sub(b.velocity.x, a.velocity.x)
+	m1c := fixed.sub(b.position.y, a.position.y)
+	m1d := fixed.sub(a.position.x, b.position.x)
+
+	// equation 2: lines 0 and 2, x and y only
+	m2a := fixed.sub(a.velocity.y, c.velocity.y)
+	m2b := fixed.sub(c.velocity.x, a.velocity.x)
+	m2c := fixed.sub(c.position.y, a.position.y)
+	m2d := fixed.sub(a.position.x, c.position.x)
+
+	// equation 3: lines 0 and 1, x and z only
+	m3a := fixed.sub(a.velocity.z, b.velocity.z)
+	m3b := fixed.sub(b.velocity.x, a.velocity.x)
+	m3c := fixed.sub(b.position.z, a.position.z)
+	m3d := fixed.sub(a.position.x, b.position.x)
+
+	// equation 4: lines 0 and 2, x and z only
+	m4a := fixed.sub(a.velocity.z, c.velocity.z)
+	m4b := fixed.sub(c.velocity.x, a.velocity.x)
+	m4c := fixed.sub(c.position.z, a.position.z)
+	m4d := fixed.sub(a.position.x, c.position.x)
+
+	// equation 5: lines 0 and 1, y and z only
+	m5a := fixed.sub(a.velocity.z, b.velocity.z)
+	m5b := fixed.sub(b.velocity.y, a.velocity.y)
+	m5c := fixed.sub(b.position.z, a.position.z)
+	m5d := fixed.sub(a.position.y, b.position.y)
+
+	// equation 6: lines 0 and 2, y and z only
+	m6a := fixed.sub(a.velocity.z, c.velocity.z)
+	m6b := fixed.sub(c.velocity.y, a.velocity.y)
+	m6c := fixed.sub(c.position.z, a.position.z)
+	m6d := fixed.sub(a.position.y, c.position.y)
+
+	zero: Big_Float
+	fixed.init_from_f64(&zero, 0.0)
+
+	mat: [6][6]Big_Float =  {
+		{m1a, m1b, zero, m1c, m1d, zero},
+		{m2a, m2b, zero, m2c, m2d, zero},
+		{m3a, zero, m3b, m3c, zero, m3d},
+		{m4a, zero, m4b, m4c, zero, m4d},
+		{zero, m5a, m5b, zero, m5c, m5d},
+		{zero, m6a, m6b, zero, m6c, m6d},
+	}
+
+	// print_mat_fixed(mat)
+
+	// equation 1: lines 0 and 1, x and y only
+	v1 := fixed.add(
+		fixed.sub(
+			fixed.sub(
+				fixed.mul(b.position.y, b.velocity.x),
+				fixed.mul(b.position.x, b.velocity.y),
+			),
+			fixed.mul(a.position.y, a.velocity.x),
+		),
+		fixed.mul(a.position.x, a.velocity.y),
+	)
+
+	// equation 2: lines 0 and 2, x and y only
+	v2 := fixed.add(
+		fixed.sub(
+			fixed.sub(
+				fixed.mul(c.position.y, c.velocity.x),
+				fixed.mul(c.position.x, c.velocity.y),
+			),
+			fixed.mul(a.position.y, a.velocity.x),
+		),
+		fixed.mul(a.position.x, a.velocity.y),
+	)
+
+	// equation 3: lines 0 and 1, x and z only
+	v3 := fixed.add(
+		fixed.sub(
+			fixed.sub(
+				fixed.mul(b.position.z, b.velocity.x),
+				fixed.mul(b.position.x, b.velocity.z),
+			),
+			fixed.mul(a.position.z, a.velocity.x),
+		),
+		fixed.mul(a.position.x, a.velocity.z),
+	)
+
+	// equation 4: lines 0 and 2, x and z only
+	v4 := fixed.add(
+		fixed.sub(
+			fixed.sub(
+				fixed.mul(c.position.z, c.velocity.x),
+				fixed.mul(c.position.x, c.velocity.z),
+			),
+			fixed.mul(a.position.z, a.velocity.x),
+		),
+		fixed.mul(a.position.x, a.velocity.z),
+	)
+
+	// equation 5: lines 0 and 1, y and z only
+	v5 := fixed.add(
+		fixed.sub(
+			fixed.sub(
+				fixed.mul(b.position.z, b.velocity.y),
+				fixed.mul(b.position.y, b.velocity.z),
+			),
+			fixed.mul(a.position.z, a.velocity.y),
+		),
+		fixed.mul(a.position.y, a.velocity.z),
+	)
+
+	// equation 6: lines 0 and 2, y and z only
+	v6 := fixed.add(
+		fixed.sub(
+			fixed.sub(
+				fixed.mul(c.position.z, c.velocity.y),
+				fixed.mul(c.position.y, c.velocity.z),
+			),
+			fixed.mul(a.position.z, a.velocity.y),
+		),
+		fixed.mul(a.position.y, a.velocity.z),
+	)
+
+	vec: [6]Big_Float = {v1, v2, v3, v4, v5, v6}
+
+	// print_vec_fixed(vec)
+
+	solution, found := solve_fixed(mat, vec)
+
+	if found {
+		fmt.println("found solution:")
+
+		solved = found
+		stone.position.x = fixed.to_f64(solution[0])
+		stone.position.y = fixed.to_f64(solution[1])
+		stone.position.z = fixed.to_f64(solution[2])
+		stone.velocity.x = fixed.to_f64(solution[3])
+		stone.velocity.y = fixed.to_f64(solution[4])
+		stone.velocity.z = fixed.to_f64(solution[5])
+	}
+
+	return
+}
+
+EPSILON :: 0.001
+
+fixed_abs :: proc(num: Big_Float) -> Big_Float {
+	minus_one: Big_Float
+	fixed.init_from_f64(&minus_one, -1.0)
+	return num if num.i >= 0 else fixed.mul(num, minus_one)
+}
+
+is_zero :: proc(num: Big_Float) -> bool {
+	epsilon: Big_Float
+	fixed.init_from_f64(&epsilon, EPSILON)
+	return greater_than_abs(epsilon, num)
+}
+
+greater_than :: proc(a, b: Big_Float) -> bool {
+	return a.i > b.i
+}
+
+greater_than_abs :: proc(a, b: Big_Float) -> bool {
+	return greater_than(fixed_abs(a), fixed_abs(b))
+}
+
+fixed_div :: proc(a, b: Big_Float) -> (c: Big_Float) {
+	zero: Big_Float
+	fixed.init_from_f64(&zero, 0)
+	if is_zero(a) do return zero
+	c = fixed.div(fixed_abs(a), fixed_abs(b))
+	if (a.i < 0 && b.i > 0) || (a.i > 0 && b.i < 0) {
+		minus_one: Big_Float
+		fixed.init_from_f64(&minus_one, -1.0)
+		c = fixed.mul(c, minus_one)
+	}
+
+	return
+}
+
+fixed_round :: proc(num: Big_Float) -> (rounded: Big_Float) {
+	fixed.init_from_f64(&rounded, math.round(fixed.to_f64(num)))
+	if is_zero(fixed.sub(rounded, num)) do return rounded
+	return num
+}
+
+// gaussian elimination
+solve_fixed :: proc(
+	mat: [6][6]Big_Float,
+	vec: [6]Big_Float,
+) -> (
+	p: [6]Big_Float,
+	solved: bool,
+) {
+	mat := mat
+	vec := vec
+
+	for i := 0; i < 6; i += 1 {
+		fmt.println("fixed:", i)
+		m: int
+		v: Big_Float
+		for j := i; j < 6; j += 1 {
+			if greater_than_abs(mat[j][i], v) {
+				v = fixed_abs(mat[j][i])
+				m = j
+			}
+		}
+		if is_zero(v) do return
+		vec[i], vec[m] = vec[m], vec[i]
+		for j := 0; j < 6; j += 1 {
+			mat[i][j], mat[m][j] = mat[m][j], mat[i][j]
+		}
+
+		// row reduction
+		for n := i + 1; n < 6; n += 1 {
+			r: Big_Float = fixed_div(mat[n][i], mat[i][i])
+			// fmt.println(
+			// 	"r:",
+			// 	print_fixed(r),
+			// 	"=",
+			// 	print_fixed(mat[n][i]),
+			// 	"/",
+			// 	print_fixed(mat[i][i]),
+			// )
+			for k := i; k < 6; k += 1 {
+				// fmt.println("old mat[", n, k, "]=", print_fixed(mat[n][k]))
+				// fmt.println("old mat[", i, k, "]=", print_fixed(mat[i][k]))
+				mat[n][k] = fixed.sub(mat[n][k], fixed.mul(r, mat[i][k]))
+				// fmt.println("mat[", n, k, "]=", print_fixed(mat[n][k]))
+			}
+			vec[n] = fixed.sub(vec[n], fixed.mul(r, vec[i]))
+			// fmt.println("vec[", n, "]=", print_fixed(vec[n]))
+		}
+
+		for j := 0; j < 6; j += 1 {
+			for k := 0; k < 6; k += 1 {
+				mat[j][k] = fixed_round(mat[j][k])
+			}
+			vec[j] = fixed_round(vec[j])
+		}
+		// fmt.println("------")
+		// print_mat_fixed(mat)
+		// fmt.println("------")
+		// print_vec_fixed(vec)
+		// fmt.println("------")
+	}
+
+	for i := 5; i >= 0; i -= 1 {
+		p[i] = vec[i]
+		for j := i + 1; j < 6; j += 1 {
+			p[i] = fixed.sub(p[i], fixed.mul(mat[i][j], p[j]))
+		}
+		p[i] = fixed_div(p[i], mat[i][i])
+	}
+
+	return p, true
+}
+
 SCALE :: 100000000000000000
 
 position_stone :: proc(
@@ -477,19 +793,6 @@ position_stone :: proc(
 	big.int_mul(&m6d, &m6d, &scale) or_return
 
 	mat: [6][6]big.Int
-	// defer for &r in mat {
-	// 	for &c in r {
-	// 		big.int_destroy(&c)
-	// 	}
-	// }
-	// =  {
-	// 	{m1a, m1b, big.INT_ZERO^, m1c, m1d, big.INT_ZERO^},
-	// 	{m2a, m2b, big.INT_ZERO^, m2c, m2d, big.INT_ZERO^},
-	// 	{m3a, big.INT_ZERO^, m3b, m3c, big.INT_ZERO^, m3d},
-	// 	{m4a, big.INT_ZERO^, m4b, m4c, big.INT_ZERO^, m4d},
-	// 	{big.INT_ZERO^, m5a, m5b, big.INT_ZERO^, m5c, m5d},
-	// 	{big.INT_ZERO^, m6a, m6b, big.INT_ZERO^, m6c, m6d},
-	// }
 
 	mat[0][0] = m1a
 	mat[0][1] = m1b
@@ -673,6 +976,7 @@ solve_float :: proc(mat: [6][6]f64, vec: [6]f64) -> (p: [6]f64, solved: bool) {
 	vec := vec
 
 	for i := 0; i < 6; i += 1 {
+		// fmt.println("float:", i)
 		m: int
 		v: f64
 		for j := i; j < 6; j += 1 {
@@ -694,22 +998,28 @@ solve_float :: proc(mat: [6][6]f64, vec: [6]f64) -> (p: [6]f64, solved: bool) {
 		// row reduction
 		for n := i + 1; n < 6; n += 1 {
 			r: f64 = mat[n][i] / mat[i][i]
+			// fmt.println("r:", r)
 			for k := i; k < 6; k += 1 {
 				mat[n][k] -= r * mat[i][k]
+				// fmt.println("mat[", n, k, "]=", mat[n][k])
 			}
 			vec[n] -= r * vec[i]
+			// fmt.println("vec[", n, "]=", vec[n])
 		}
 
+		// fmt.println("=====")
 		// for j := 0; j < 6; j += 1 {
 		// 	for k := 0; k < 6; k += 1 {
-		// 		fmt.printf("%.0f ", mat[j][k])
+		// 		fmt.printf("%.3f ", mat[j][k])
 		// 	}
 		// 	fmt.println("")
 		// }
+		// fmt.println("=====")
 		// for j := 0; j < 6; j += 1 {
-		// 	fmt.printf("%.0f ", vec[j])
+		// 	fmt.printf("%.3f ", vec[j])
 		// }
 		// fmt.println("")
+		// fmt.println("=====")
 	}
 
 	for i := 5; i >= 0; i -= 1 {
@@ -751,4 +1061,23 @@ print_big :: proc(num: big.Int) -> string {
 	defer big.int_destroy(&t)
 	v, _ := big.int_itoa_string(&t)
 	return v
+}
+
+print_mat_fixed :: proc(mat: [6][6]Big_Float) {
+	for i := 0; i < 6; i += 1 {
+		print_vec_fixed(mat[i])
+	}
+}
+
+print_vec_fixed :: proc(vec: [6]Big_Float) {
+	for i := 0; i < 6; i += 1 {
+		num := print_fixed(vec[i])
+		defer delete(num)
+		fmt.print(num, " ")
+	}
+	fmt.println("")
+}
+
+print_fixed :: proc(num: Big_Float) -> string {
+	return fixed.to_string(num)
 }
