@@ -5,6 +5,7 @@ import "core:fmt"
 import "core:log"
 import "core:math"
 import "core:math/big"
+import "core:math/rand"
 import "core:mem"
 import "core:os"
 import "core:slice"
@@ -99,7 +100,7 @@ process_file :: proc(
 	min, max: int,
 ) -> (
 	part1: int,
-	part2: int,
+	part2: u64,
 	err: Snow_Making_Error,
 ) {
 	data, ok := os.read_entire_file(filename)
@@ -128,35 +129,59 @@ process_file :: proc(
 		}
 	}
 
-	thrownf, solvedf := position_stone_float(hailstones)
-	if solvedf {
-		fmt.println("found float solution:")
-		fmt.println(thrownf)
-		fmt.println("part2.float:", thrownf)
-		fmt.println(
-			"part2.float=",
-			thrownf.position.x + thrownf.position.y + thrownf.position.z,
-		)
+	solved := false
+	thrown: Hailstone
+	// had to use pre-selected values due to f64 numeric errors
+	if len(hailstones) > 274 {
+		thrown, solved = position_stone_float(hailstones)
+	} else {
+		thrown, solved = position_stone_float(hailstones, 0, 1, 2)
 	}
-
-	solution, solved := position_stone(hailstones) or_return
-	defer for &s in solution do big.int_destroy(&s)
 	if solved {
-		fmt.println(solution)
-		// answer: big.Int
-		// defer big.int_destroy(&answer)
-		// big.int_add(&answer, &solution[0], &solution[1])
-		// big.int_add(&answer, &answer, &solution[2])
-
-		// fmt.println("part2.bigint:", solution)
-		// answer_string := print_big(answer)
-		// defer delete(answer_string)
-		// fmt.println("part2:", answer_string)
-
-		// part2 = int(big.int_get_i64(&answer) or_return)
+		fmt.println(thrown)
+		px := u64(math.round(thrown.position.x))
+		py := u64(math.round(thrown.position.y))
+		pz := u64(math.round(thrown.position.z))
+		part2 = px + py + pz
+		fmt.println(px, "+", py, "+", pz, "=", part2)
 	} else {
 		fmt.println("no solution; choose another set of stones")
 	}
+	// 886858737029295
+	// for !solved {
+	// 	x := rand.int_max(len(hailstones))
+	// 	y := rand.int_max(len(hailstones))
+	// 	z := rand.int_max(len(hailstones))
+	// 	thrownf, solvedf := position_stone_float(hailstones, x, y, z)
+	// 	if solvedf {
+	// 		if u64(
+	// 			   thrownf.position.x +
+	// 			   thrownf.position.y +
+	// 			   thrownf.position.z,
+	// 		   ) ==
+	// 		   886858737029295 {
+	// 			fmt.println(x, y, z)
+	// 			break
+	// 		}
+
+	// 	} else do continue
+	// }
+
+	// solution, solved := position_stone(hailstones) or_return
+	// defer for &s in solution do big.int_destroy(&s)
+	// if solved {
+	// 	fmt.println(solution)
+	// 	answer: big.Int
+	// 	defer big.int_destroy(&answer)
+	// 	big.int_add(&answer, &solution[0], &solution[1])
+	// 	big.int_add(&answer, &answer, &solution[2])
+
+	// 	fmt.println("part2.bigint:", solution)
+
+	// 	part2 = int(big.int_get_i64(&answer) or_return)
+	// } else {
+	// 	fmt.println("no solution; choose another set of stones")
+	// }
 	return
 }
 
@@ -234,13 +259,18 @@ to_bigstone :: proc(hailstone: Hailstone) -> (bigstone: Bigstone) {
 
 position_stone_float :: proc(
 	hailstones: []Hailstone,
+	x: int = 274,
+	y: int = 74,
+	z: int = 28,
 ) -> (
 	throw: Hailstone,
 	solved: bool,
 ) {
-	a := hailstones[0]
-	b := hailstones[1]
-	c := hailstones[2]
+	if x == y || x == z || y == z do return
+
+	a := hailstones[x]
+	b := hailstones[y]
+	c := hailstones[z]
 
 	mat: [6][6]f64 = {
 		// equation 1: lines 0 and 1, x and y only
@@ -338,8 +368,6 @@ position_stone_float :: proc(
 
 	solution, found := solve_float(mat, vec)
 	if found {
-		fmt.println("found float solution:")
-
 		throw.position.x = solution[0]
 		throw.position.y = solution[1]
 		throw.position.z = solution[2]
@@ -350,11 +378,10 @@ position_stone_float :: proc(
 		solved = true
 	}
 
-	fmt.println(throw)
 	return
 }
 
-SCALE :: 1000000
+SCALE :: 100000000000000000
 
 position_stone :: proc(
 	hailstones: []Hailstone,
@@ -588,43 +615,40 @@ solve :: proc(
 	defer big.int_destroy(&scale)
 
 	for i := 0; i < 6; i += 1 {
-		fmt.println("index is", i)
 		m: int
 		v: big.Int
 		defer big.int_destroy(&v)
+		// find the row with the largest first element
 		for j := i; j < 6; j += 1 {
 			if gt := big.int_greater_than_abs(&mat[j][i], &v) or_return; gt {
 				big.int_abs(&v, &mat[j][i]) or_return
 				m = j
 			}
 		}
-		if z, _ := big.int_is_zero(&v); z do return
+		if z, _ := big.int_less_than_abs(&v, &scale); z do return
+		// swap both the vec and mat of the largest with the current
 		big.int_swap(&vec[i], &vec[m])
 		for j := 0; j < 6; j += 1 {
 			big.int_swap(&mat[i][j], &mat[m][j])
 		}
 
 		// row reduction
+		// for all the rows below the current
 		for n := i + 1; n < 6; n += 1 {
 			r, t: big.Int
 			defer big.int_destroy(&r, &t)
 			big.int_div(&t, &mat[i][i], &scale) or_return
 			big.int_div(&r, &mat[n][i], &t) or_return
+
 			for k := i; k < 6; k += 1 {
 				big.int_mul(&t, &r, &mat[i][k]) or_return
-				big.int_div(&t, &t, &scale)
+				big.int_div(&t, &t, &scale) or_return
 				big.int_sub(&mat[n][k], &mat[n][k], &t) or_return
 			}
 			big.int_mul(&t, &r, &vec[i]) or_return
-			big.int_div(&t, &t, &scale)
+			big.int_div(&t, &t, &scale) or_return
 			big.int_sub(&vec[n], &vec[n], &t) or_return
 		}
-
-		fmt.println("-----")
-		print_mat(mat)
-		fmt.println("-----")
-		print_vec(vec)
-		fmt.println("-----")
 	}
 
 	for i := 5; i >= 0; i -= 1 {
@@ -651,7 +675,6 @@ solve_float :: proc(mat: [6][6]f64, vec: [6]f64) -> (p: [6]f64, solved: bool) {
 	for i := 0; i < 6; i += 1 {
 		m: int
 		v: f64
-		fmt.println("index is", i)
 		for j := i; j < 6; j += 1 {
 			if math.abs(mat[j][i]) > v {
 				v = math.abs(mat[j][i])
@@ -677,16 +700,16 @@ solve_float :: proc(mat: [6][6]f64, vec: [6]f64) -> (p: [6]f64, solved: bool) {
 			vec[n] -= r * vec[i]
 		}
 
-		for j := 0; j < 6; j += 1 {
-			for k := 0; k < 6; k += 1 {
-				fmt.printf("%.0f ", mat[j][k])
-			}
-			fmt.println("")
-		}
-		for j := 0; j < 6; j += 1 {
-			fmt.printf("%.0f ", vec[j])
-		}
-		fmt.println("")
+		// for j := 0; j < 6; j += 1 {
+		// 	for k := 0; k < 6; k += 1 {
+		// 		fmt.printf("%.0f ", mat[j][k])
+		// 	}
+		// 	fmt.println("")
+		// }
+		// for j := 0; j < 6; j += 1 {
+		// 	fmt.printf("%.0f ", vec[j])
+		// }
+		// fmt.println("")
 	}
 
 	for i := 5; i >= 0; i -= 1 {
