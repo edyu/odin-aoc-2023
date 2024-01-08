@@ -16,6 +16,7 @@ Snow_Making_Error :: union {
 	Unable_To_Read_File,
 	Parse_Error,
 	mem.Allocator_Error,
+	big.Error,
 }
 
 Parse_Error :: struct {
@@ -131,15 +132,28 @@ process_file :: proc(
 	if solvedf {
 		fmt.println("found float solution:")
 		fmt.println(thrownf)
+		fmt.println("part2.float:", thrownf)
+		fmt.println(
+			"part2.float=",
+			thrownf.position.x + thrownf.position.y + thrownf.position.z,
+		)
 	}
 
-	thrown, solved := position_stone(hailstones)
+	solution, solved := position_stone(hailstones) or_return
+	defer for &s in solution do big.int_destroy(&s)
 	if solved {
-		part2 =
-			int(thrown.position.x) +
-			int(thrown.position.y) +
-			int(thrown.position.z)
-		fmt.println("part2:", part2)
+		fmt.println(solution)
+		// answer: big.Int
+		// defer big.int_destroy(&answer)
+		// big.int_add(&answer, &solution[0], &solution[1])
+		// big.int_add(&answer, &answer, &solution[2])
+
+		// fmt.println("part2.bigint:", solution)
+		// answer_string := print_big(answer)
+		// defer delete(answer_string)
+		// fmt.println("part2:", answer_string)
+
+		// part2 = int(big.int_get_i64(&answer) or_return)
 	} else {
 		fmt.println("no solution; choose another set of stones")
 	}
@@ -285,7 +299,7 @@ position_stone_float :: proc(
 		},
 	}
 
-	// fmt.println("mat:", mat)
+	fmt.println("mat:", mat)
 
 	vec: [6]f64 = {
 		// equation 1: lines 0 and 1, x and y only
@@ -320,7 +334,7 @@ position_stone_float :: proc(
 		a.position.y * a.velocity.z,
 	}
 
-	// fmt.println("vec:", vec)
+	fmt.println("vec:", vec)
 
 	solution, found := solve_float(mat, vec)
 	if found {
@@ -340,11 +354,14 @@ position_stone_float :: proc(
 	return
 }
 
+SCALE :: 1000000
+
 position_stone :: proc(
 	hailstones: []Hailstone,
 ) -> (
-	throw: Hailstone,
+	solution: [6]big.Int,
 	solved: bool,
+	err: Snow_Making_Error,
 ) {
 	a := to_bigstone(hailstones[0])
 	defer big.int_destroy(&a.position.x, &a.position.y, &a.position.z)
@@ -358,232 +375,217 @@ position_stone :: proc(
 
 	scale: big.Int
 	defer big.int_destroy(&scale)
-	big.int_set_from_integer(&scale, 100)
+	big.int_set_from_integer(&scale, SCALE) or_return
 
 	m1a, m1b, m1c, m1d: big.Int
 	defer big.int_destroy(&m1a, &m1b, &m1c, &m1d)
 	// equation 1: lines 0 and 1, x and y only
-	big.int_sub(&m1a, &a.velocity.y, &b.velocity.y)
-	big.int_sub(&m1b, &b.velocity.x, &a.velocity.x)
-	big.int_sub(&m1c, &b.position.y, &a.position.y)
-	big.int_sub(&m1d, &a.position.x, &b.position.x)
-	big.int_mul(&m1a, &m1a, &scale)
-	big.int_mul(&m1b, &m1b, &scale)
-	big.int_mul(&m1c, &m1c, &scale)
-	big.int_mul(&m1d, &m1d, &scale)
+	big.int_sub(&m1a, &a.velocity.y, &b.velocity.y) or_return
+	big.int_sub(&m1b, &b.velocity.x, &a.velocity.x) or_return
+	big.int_sub(&m1c, &b.position.y, &a.position.y) or_return
+	big.int_sub(&m1d, &a.position.x, &b.position.x) or_return
+	big.int_mul(&m1a, &m1a, &scale) or_return
+	big.int_mul(&m1b, &m1b, &scale) or_return
+	big.int_mul(&m1c, &m1c, &scale) or_return
+	big.int_mul(&m1d, &m1d, &scale) or_return
 
 	m2a, m2b, m2c, m2d: big.Int
 	defer big.int_destroy(&m2a, &m2b, &m2c, &m2d)
 	// equation 2: lines 0 and 2, x and y only
-	big.int_sub(&m2a, &a.velocity.y, &c.velocity.y)
-	big.int_sub(&m2b, &c.velocity.x, &a.velocity.x)
-	big.int_sub(&m2c, &c.position.y, &a.position.y)
-	big.int_sub(&m2d, &a.position.x, &c.position.x)
-	big.int_mul(&m2a, &m2a, &scale)
-	big.int_mul(&m2b, &m2b, &scale)
-	big.int_mul(&m2c, &m2c, &scale)
-	big.int_mul(&m2d, &m2d, &scale)
+	big.int_sub(&m2a, &a.velocity.y, &c.velocity.y) or_return
+	big.int_sub(&m2b, &c.velocity.x, &a.velocity.x) or_return
+	big.int_sub(&m2c, &c.position.y, &a.position.y) or_return
+	big.int_sub(&m2d, &a.position.x, &c.position.x) or_return
+	big.int_mul(&m2a, &m2a, &scale) or_return
+	big.int_mul(&m2b, &m2b, &scale) or_return
+	big.int_mul(&m2c, &m2c, &scale) or_return
+	big.int_mul(&m2d, &m2d, &scale) or_return
 
 	m3a, m3b, m3c, m3d: big.Int
 	defer big.int_destroy(&m3a, &m3b, &m3c, &m3d)
 	// equation 3: lines 0 and 1, x and z only
-	big.int_sub(&m3a, &a.velocity.z, &b.velocity.z)
-	big.int_sub(&m3b, &b.velocity.x, &a.velocity.x)
-	big.int_sub(&m3c, &b.position.z, &a.position.z)
-	big.int_sub(&m3d, &a.position.x, &b.position.x)
-	big.int_mul(&m3a, &m3a, &scale)
-	big.int_mul(&m3b, &m3b, &scale)
-	big.int_mul(&m3c, &m3c, &scale)
-	big.int_mul(&m3d, &m3d, &scale)
+	big.int_sub(&m3a, &a.velocity.z, &b.velocity.z) or_return
+	big.int_sub(&m3b, &b.velocity.x, &a.velocity.x) or_return
+	big.int_sub(&m3c, &b.position.z, &a.position.z) or_return
+	big.int_sub(&m3d, &a.position.x, &b.position.x) or_return
+	big.int_mul(&m3a, &m3a, &scale) or_return
+	big.int_mul(&m3b, &m3b, &scale) or_return
+	big.int_mul(&m3c, &m3c, &scale) or_return
+	big.int_mul(&m3d, &m3d, &scale) or_return
 
 	m4a, m4b, m4c, m4d: big.Int
 	defer big.int_destroy(&m4a, &m4b, &m4c, &m4d)
 	// equation 4: lines 0 and 2, x and z only
-	big.int_sub(&m4a, &a.velocity.z, &c.velocity.z)
-	big.int_sub(&m4b, &c.velocity.x, &a.velocity.x)
-	big.int_sub(&m4c, &c.position.z, &a.position.z)
-	big.int_sub(&m4d, &a.position.x, &c.position.x)
-	big.int_mul(&m4a, &m4a, &scale)
-	big.int_mul(&m4b, &m4b, &scale)
-	big.int_mul(&m4c, &m4c, &scale)
-	big.int_mul(&m4d, &m4d, &scale)
+	big.int_sub(&m4a, &a.velocity.z, &c.velocity.z) or_return
+	big.int_sub(&m4b, &c.velocity.x, &a.velocity.x) or_return
+	big.int_sub(&m4c, &c.position.z, &a.position.z) or_return
+	big.int_sub(&m4d, &a.position.x, &c.position.x) or_return
+	big.int_mul(&m4a, &m4a, &scale) or_return
+	big.int_mul(&m4b, &m4b, &scale) or_return
+	big.int_mul(&m4c, &m4c, &scale) or_return
+	big.int_mul(&m4d, &m4d, &scale) or_return
 
 	m5a, m5b, m5c, m5d: big.Int
 	defer big.int_destroy(&m5a, &m5b, &m5c, &m5d)
 	// equation 5: lines 0 and 1, y and z only
-	big.int_sub(&m5a, &a.velocity.z, &b.velocity.z)
-	big.int_sub(&m5b, &b.velocity.y, &a.velocity.y)
-	big.int_sub(&m5c, &b.position.z, &a.position.z)
-	big.int_sub(&m5d, &a.position.y, &b.position.y)
-	big.int_mul(&m5a, &m5a, &scale)
-	big.int_mul(&m5b, &m5b, &scale)
-	big.int_mul(&m5c, &m5c, &scale)
-	big.int_mul(&m5d, &m5d, &scale)
+	big.int_sub(&m5a, &a.velocity.z, &b.velocity.z) or_return
+	big.int_sub(&m5b, &b.velocity.y, &a.velocity.y) or_return
+	big.int_sub(&m5c, &b.position.z, &a.position.z) or_return
+	big.int_sub(&m5d, &a.position.y, &b.position.y) or_return
+	big.int_mul(&m5a, &m5a, &scale) or_return
+	big.int_mul(&m5b, &m5b, &scale) or_return
+	big.int_mul(&m5c, &m5c, &scale) or_return
+	big.int_mul(&m5d, &m5d, &scale) or_return
 
 	m6a, m6b, m6c, m6d: big.Int
 	defer big.int_destroy(&m6a, &m6b, &m6c, &m6d)
 	// equation 6: lines 0 and 2, y and z only
-	big.int_sub(&m6a, &a.velocity.z, &c.velocity.z)
-	big.int_sub(&m6b, &c.velocity.y, &a.velocity.y)
-	big.int_sub(&m6c, &c.position.z, &a.position.z)
-	big.int_sub(&m6d, &a.position.y, &c.position.y)
-	big.int_mul(&m6a, &m6a, &scale)
-	big.int_mul(&m6b, &m6b, &scale)
-	big.int_mul(&m6c, &m6c, &scale)
-	big.int_mul(&m6d, &m6d, &scale)
+	big.int_sub(&m6a, &a.velocity.z, &c.velocity.z) or_return
+	big.int_sub(&m6b, &c.velocity.y, &a.velocity.y) or_return
+	big.int_sub(&m6c, &c.position.z, &a.position.z) or_return
+	big.int_sub(&m6d, &a.position.y, &c.position.y) or_return
+	big.int_mul(&m6a, &m6a, &scale) or_return
+	big.int_mul(&m6b, &m6b, &scale) or_return
+	big.int_mul(&m6c, &m6c, &scale) or_return
+	big.int_mul(&m6d, &m6d, &scale) or_return
 
-	mat: [6][6]big.Int =  {
-		{m1a, m1b, big.INT_ZERO^, m1c, m1d, big.INT_ZERO^},
-		{m2a, m2b, big.INT_ZERO^, m2c, m2d, big.INT_ZERO^},
-		{m3a, big.INT_ZERO^, m3b, m3c, big.INT_ZERO^, m3d},
-		{m4a, big.INT_ZERO^, m4b, m4c, big.INT_ZERO^, m4d},
-		{big.INT_ZERO^, m5a, m5b, big.INT_ZERO^, m5c, m5d},
-		{big.INT_ZERO^, m6a, m6b, big.INT_ZERO^, m6c, m6d},
-	}
+	mat: [6][6]big.Int
+	// defer for &r in mat {
+	// 	for &c in r {
+	// 		big.int_destroy(&c)
+	// 	}
+	// }
+	// =  {
+	// 	{m1a, m1b, big.INT_ZERO^, m1c, m1d, big.INT_ZERO^},
+	// 	{m2a, m2b, big.INT_ZERO^, m2c, m2d, big.INT_ZERO^},
+	// 	{m3a, big.INT_ZERO^, m3b, m3c, big.INT_ZERO^, m3d},
+	// 	{m4a, big.INT_ZERO^, m4b, m4c, big.INT_ZERO^, m4d},
+	// 	{big.INT_ZERO^, m5a, m5b, big.INT_ZERO^, m5c, m5d},
+	// 	{big.INT_ZERO^, m6a, m6b, big.INT_ZERO^, m6c, m6d},
+	// }
 
-	mat1, _ := big.int_get_i64(&m1a)
-	mat2, _ := big.int_get_i64(&m1b)
-	mat3, _ := big.int_get_i64(&m1c)
-	mat4, _ := big.int_get_i64(&m1d)
-	mat5, _ := big.int_get_i64(&m2a)
-	mat6, _ := big.int_get_i64(&m2b)
-	mat7, _ := big.int_get_i64(&m2c)
-	mat8, _ := big.int_get_i64(&m2d)
-	mat9, _ := big.int_get_i64(&m3a)
-	mat10, _ := big.int_get_i64(&m3b)
-	mat11, _ := big.int_get_i64(&m3c)
-	mat12, _ := big.int_get_i64(&m3d)
-	mat13, _ := big.int_get_i64(&m4a)
-	mat14, _ := big.int_get_i64(&m4b)
-	mat15, _ := big.int_get_i64(&m4c)
-	mat16, _ := big.int_get_i64(&m4d)
-	mat17, _ := big.int_get_i64(&m5a)
-	mat18, _ := big.int_get_i64(&m5b)
-	mat19, _ := big.int_get_i64(&m5c)
-	mat20, _ := big.int_get_i64(&m5d)
-	mat21, _ := big.int_get_i64(&m6a)
-	mat22, _ := big.int_get_i64(&m6b)
-	mat23, _ := big.int_get_i64(&m6c)
-	mat24, _ := big.int_get_i64(&m6d)
-	fmt.println(mat1, mat2, mat3, mat4)
-	fmt.println(mat5, mat6, mat7, mat8)
-	fmt.println(mat9, mat10, mat11, mat12)
-	fmt.println(mat13, mat14, mat15, mat16)
-	fmt.println(mat17, mat18, mat19, mat20)
-	fmt.println(mat21, mat22, mat23, mat24)
+	mat[0][0] = m1a
+	mat[0][1] = m1b
+	mat[0][3] = m1c
+	mat[0][4] = m1d
+	mat[1][0] = m2a
+	mat[1][1] = m2b
+	mat[1][3] = m2c
+	mat[1][4] = m2d
+	mat[2][0] = m3a
+	mat[2][2] = m3b
+	mat[2][3] = m3c
+	mat[2][5] = m3d
+	mat[3][0] = m4a
+	mat[3][2] = m4b
+	mat[3][3] = m4c
+	mat[3][5] = m4d
+	mat[4][1] = m5a
+	mat[4][2] = m5b
+	mat[4][4] = m5c
+	mat[4][5] = m5d
+	mat[5][1] = m6a
+	mat[5][2] = m6b
+	mat[5][4] = m6c
+	mat[5][5] = m6d
+
+	// print_mat(mat)
 
 	v1, v2, v3, v4, v5, v6: big.Int
 	vt: big.Int
 	defer big.int_destroy(&v1, &v2, &v3, &v4, &v5, &v6, &vt)
 
 	// equation 1: lines 0 and 1, x and y only
-	big.int_mul(&v1, &b.position.y, &b.velocity.x)
-	big.int_mul(&vt, &b.position.x, &b.velocity.y)
-	big.int_sub(&v1, &v1, &vt)
-	big.int_mul(&vt, &a.position.y, &a.velocity.x)
-	big.int_sub(&v1, &v1, &vt)
-	big.int_mul(&vt, &a.position.x, &a.velocity.y)
-	big.int_add(&v1, &v1, &vt)
-	big.int_mul(&v1, &v1, &scale)
+	big.int_mul(&v1, &b.position.y, &b.velocity.x) or_return
+	big.int_mul(&vt, &b.position.x, &b.velocity.y) or_return
+	big.int_sub(&v1, &v1, &vt) or_return
+	big.int_mul(&vt, &a.position.y, &a.velocity.x) or_return
+	big.int_sub(&v1, &v1, &vt) or_return
+	big.int_mul(&vt, &a.position.x, &a.velocity.y) or_return
+	big.int_add(&v1, &v1, &vt) or_return
+	big.int_mul(&v1, &v1, &scale) or_return
 
 	// equation 2: lines 0 and 2, x and y only
-	big.int_mul(&v2, &c.position.y, &c.velocity.x)
-	big.int_mul(&vt, &c.position.x, &c.velocity.y)
-	big.int_sub(&v2, &v2, &vt)
-	big.int_mul(&vt, &a.position.y, &a.velocity.x)
-	big.int_sub(&v2, &v2, &vt)
-	big.int_mul(&vt, &a.position.x, &a.velocity.y)
-	big.int_add(&v2, &v2, &vt)
-	big.int_mul(&v2, &v2, &scale)
+	big.int_mul(&v2, &c.position.y, &c.velocity.x) or_return
+	big.int_mul(&vt, &c.position.x, &c.velocity.y) or_return
+	big.int_sub(&v2, &v2, &vt) or_return
+	big.int_mul(&vt, &a.position.y, &a.velocity.x) or_return
+	big.int_sub(&v2, &v2, &vt) or_return
+	big.int_mul(&vt, &a.position.x, &a.velocity.y) or_return
+	big.int_add(&v2, &v2, &vt) or_return
+	big.int_mul(&v2, &v2, &scale) or_return
 
 	// equation 3: lines 0 and 1, x and z only
-	big.int_mul(&v3, &b.position.z, &b.velocity.x)
-	big.int_mul(&vt, &b.position.x, &b.velocity.z)
-	big.int_sub(&v3, &v3, &vt)
-	big.int_mul(&vt, &a.position.z, &a.velocity.x)
-	big.int_sub(&v3, &v3, &vt)
-	big.int_mul(&vt, &a.position.x, &a.velocity.z)
-	big.int_add(&v3, &v3, &vt)
-	big.int_mul(&v3, &v3, &scale)
+	big.int_mul(&v3, &b.position.z, &b.velocity.x) or_return
+	big.int_mul(&vt, &b.position.x, &b.velocity.z) or_return
+	big.int_sub(&v3, &v3, &vt) or_return
+	big.int_mul(&vt, &a.position.z, &a.velocity.x) or_return
+	big.int_sub(&v3, &v3, &vt) or_return
+	big.int_mul(&vt, &a.position.x, &a.velocity.z) or_return
+	big.int_add(&v3, &v3, &vt) or_return
+	big.int_mul(&v3, &v3, &scale) or_return
 
 	// equation 4: lines 0 and 2, x and z only
-	big.int_mul(&v4, &c.position.z, &c.velocity.x)
-	big.int_mul(&vt, &c.position.x, &c.velocity.z)
-	big.int_sub(&v4, &v4, &vt)
-	big.int_mul(&vt, &a.position.z, &a.velocity.x)
-	big.int_sub(&v4, &v4, &vt)
-	big.int_mul(&vt, &a.position.x, &a.velocity.z)
-	big.int_add(&v4, &v4, &vt)
-	big.int_mul(&v4, &v4, &scale)
+	big.int_mul(&v4, &c.position.z, &c.velocity.x) or_return
+	big.int_mul(&vt, &c.position.x, &c.velocity.z) or_return
+	big.int_sub(&v4, &v4, &vt) or_return
+	big.int_mul(&vt, &a.position.z, &a.velocity.x) or_return
+	big.int_sub(&v4, &v4, &vt) or_return
+	big.int_mul(&vt, &a.position.x, &a.velocity.z) or_return
+	big.int_add(&v4, &v4, &vt) or_return
+	big.int_mul(&v4, &v4, &scale) or_return
 
 	// equation 5: lines 0 and 1, y and z only
-	big.int_mul(&v5, &b.position.z, &b.velocity.y)
-	big.int_mul(&vt, &b.position.y, &b.velocity.z)
-	big.int_sub(&v5, &v5, &vt)
-	big.int_mul(&vt, &a.position.z, &a.velocity.y)
-	big.int_sub(&v5, &v5, &vt)
-	big.int_mul(&vt, &a.position.y, &a.velocity.z)
-	big.int_add(&v5, &v5, &vt)
-	big.int_mul(&v5, &v5, &scale)
+	big.int_mul(&v5, &b.position.z, &b.velocity.y) or_return
+	big.int_mul(&vt, &b.position.y, &b.velocity.z) or_return
+	big.int_sub(&v5, &v5, &vt) or_return
+	big.int_mul(&vt, &a.position.z, &a.velocity.y) or_return
+	big.int_sub(&v5, &v5, &vt) or_return
+	big.int_mul(&vt, &a.position.y, &a.velocity.z) or_return
+	big.int_add(&v5, &v5, &vt) or_return
+	big.int_mul(&v5, &v5, &scale) or_return
 
 	// equation 6: lines 0 and 2, y and z only
-	big.int_mul(&v6, &c.position.z, &c.velocity.y)
-	big.int_mul(&vt, &c.position.y, &c.velocity.z)
-	big.int_sub(&v6, &v6, &vt)
-	big.int_mul(&vt, &a.position.z, &a.velocity.y)
-	big.int_sub(&v6, &v6, &vt)
-	big.int_mul(&vt, &a.position.y, &a.velocity.z)
-	big.int_add(&v6, &v6, &vt)
-	big.int_mul(&v6, &v6, &scale)
+	big.int_mul(&v6, &c.position.z, &c.velocity.y) or_return
+	big.int_mul(&vt, &c.position.y, &c.velocity.z) or_return
+	big.int_sub(&v6, &v6, &vt) or_return
+	big.int_mul(&vt, &a.position.z, &a.velocity.y) or_return
+	big.int_sub(&v6, &v6, &vt) or_return
+	big.int_mul(&vt, &a.position.y, &a.velocity.z) or_return
+	big.int_add(&v6, &v6, &vt) or_return
+	big.int_mul(&v6, &v6, &scale) or_return
 
 	vec: [6]big.Int = {v1, v2, v3, v4, v5, v6}
 
-	vec1, _ := big.int_get_i64(&v1)
-	vec2, _ := big.int_get_i64(&v2)
-	vec3, _ := big.int_get_i64(&v3)
-	vec4, _ := big.int_get_i64(&v4)
-	vec5, _ := big.int_get_i64(&v5)
-	vec6, _ := big.int_get_i64(&v6)
-	fmt.println(vec1, vec2, vec3)
-	fmt.println(vec4, vec5, vec6)
+	print_vec(vec)
 
-	solution, found := solve(mat, vec)
-	defer for &s in solution do big.int_destroy(&s)
-	if found {
-		fmt.println("found solution:")
+	solution, solved = solve(mat, vec) or_return
+	// if solved {
+	// 	fmt.println("found solution:")
 
-		for &s in solution do big.int_div(&s, &s, &scale)
-		px, _ := big.int_get_i64(&solution[0])
-		py, _ := big.int_get_i64(&solution[1])
-		pz, _ := big.int_get_i64(&solution[2])
-		vx, _ := big.int_get_i64(&solution[3])
-		vy, _ := big.int_get_i64(&solution[4])
-		vz, _ := big.int_get_i64(&solution[5])
-		fmt.println(px, py, pz, vx, vy, vz)
+	// 	// for &s in solution {
+	// 	// 	big.int_div(&s, &s, &scale) or_return
+	// 	// }
+	// }
 
-		throw.position.x = f64(px)
-		throw.position.y = f64(py)
-		throw.position.z = f64(pz)
-		throw.velocity.x = f64(vx)
-		throw.velocity.y = f64(vy)
-		throw.velocity.z = f64(vz)
-
-		solved = true
-	}
-
-	fmt.println(throw)
 	return
 }
 
+// gaussian elimination using big int
 solve :: proc(
 	mat: [6][6]big.Int,
 	vec: [6]big.Int,
 ) -> (
 	p: [6]big.Int,
 	solved: bool,
+	err: Snow_Making_Error,
 ) {
 	mat := mat
 	vec := vec
+
+	scale: big.Int
+	big.int_set_from_integer(&scale, SCALE) or_return
+	defer big.int_destroy(&scale)
 
 	for i := 0; i < 6; i += 1 {
 		fmt.println("index is", i)
@@ -591,53 +593,54 @@ solve :: proc(
 		v: big.Int
 		defer big.int_destroy(&v)
 		for j := i; j < 6; j += 1 {
-			fmt.println("comparing", mat[j][i])
-			if gt, _ := big.int_greater_than_abs(&mat[j][i], &v); gt {
-				big.int_abs(&v, &mat[j][i])
+			if gt := big.int_greater_than_abs(&mat[j][i], &v) or_return; gt {
+				big.int_abs(&v, &mat[j][i]) or_return
 				m = j
-				fmt.println("found idx:", m, v)
 			}
 		}
-		fmt.println("checking against 0:", v)
 		if z, _ := big.int_is_zero(&v); z do return
-		fmt.println("not 0:", v)
-		tmp: big.Int
-		defer big.int_destroy(&tmp)
-		big.int_copy(&tmp, &vec[i])
-		big.int_copy(&vec[i], &vec[m])
-		big.int_copy(&vec[m], &tmp)
+		big.int_swap(&vec[i], &vec[m])
 		for j := 0; j < 6; j += 1 {
-			big.int_copy(&tmp, &mat[i][j])
-			big.int_copy(&mat[i][j], &mat[m][j])
-			big.int_copy(&mat[m][j], &tmp)
+			big.int_swap(&mat[i][j], &mat[m][j])
 		}
 
 		// row reduction
 		for n := i + 1; n < 6; n += 1 {
 			r, t: big.Int
 			defer big.int_destroy(&r, &t)
-			big.int_div(&r, &mat[n][i], &mat[i][i])
+			big.int_div(&t, &mat[i][i], &scale) or_return
+			big.int_div(&r, &mat[n][i], &t) or_return
 			for k := i; k < 6; k += 1 {
-				big.int_mul(&t, &r, &mat[i][k])
-				big.int_sub(&mat[n][k], &mat[n][k], &t)
+				big.int_mul(&t, &r, &mat[i][k]) or_return
+				big.int_div(&t, &t, &scale)
+				big.int_sub(&mat[n][k], &mat[n][k], &t) or_return
 			}
-			big.int_mul(&t, &r, &vec[i])
-			big.int_sub(&vec[n], &vec[n], &t)
+			big.int_mul(&t, &r, &vec[i]) or_return
+			big.int_div(&t, &t, &scale)
+			big.int_sub(&vec[n], &vec[n], &t) or_return
 		}
+
+		fmt.println("-----")
+		print_mat(mat)
+		fmt.println("-----")
+		print_vec(vec)
+		fmt.println("-----")
 	}
 
 	for i := 5; i >= 0; i -= 1 {
-		big.int_copy(&p[i], &vec[i])
+		big.int_copy(&p[i], &vec[i]) or_return
+		t: big.Int
+		defer big.int_destroy(&t)
 		for j := i + 1; j < 6; j += 1 {
-			t: big.Int
-			defer big.int_destroy(&t)
-			big.int_mul(&t, &mat[i][j], &p[j])
-			big.int_sub(&p[i], &p[i], &t)
+			big.int_mul(&t, &mat[i][j], &p[j]) or_return
+			big.int_sub(&p[i], &p[i], &t) or_return
 		}
-		big.int_div(&p[i], &p[i], &mat[i][i])
+		// big.int_div(&t, &mat[i][i], &scale) or_return
+		// big.int_div(&p[i], &p[i], &t) or_return
+		big.int_div(&p[i], &p[i], &mat[i][i]) or_return
 	}
 
-	return p, true
+	return p, true, nil
 }
 
 // gaussian elimination
@@ -650,14 +653,11 @@ solve_float :: proc(mat: [6][6]f64, vec: [6]f64) -> (p: [6]f64, solved: bool) {
 		v: f64
 		fmt.println("index is", i)
 		for j := i; j < 6; j += 1 {
-			fmt.println("comparing", mat[j][i])
 			if math.abs(mat[j][i]) > v {
 				v = math.abs(mat[j][i])
 				m = j
-				fmt.println("found idx", m)
 			}
 		}
-		fmt.println("checking against 0", v)
 		if math.abs(v) < 1e-10 do return
 		tmp := vec[i]
 		vec[i] = vec[m]
@@ -676,6 +676,17 @@ solve_float :: proc(mat: [6][6]f64, vec: [6]f64) -> (p: [6]f64, solved: bool) {
 			}
 			vec[n] -= r * vec[i]
 		}
+
+		for j := 0; j < 6; j += 1 {
+			for k := 0; k < 6; k += 1 {
+				fmt.printf("%.0f ", mat[j][k])
+			}
+			fmt.println("")
+		}
+		for j := 0; j < 6; j += 1 {
+			fmt.printf("%.0f ", vec[j])
+		}
+		fmt.println("")
 	}
 
 	for i := 5; i >= 0; i -= 1 {
@@ -687,4 +698,34 @@ solve_float :: proc(mat: [6][6]f64, vec: [6]f64) -> (p: [6]f64, solved: bool) {
 	}
 
 	return p, true
+}
+
+print_mat :: proc(mat: [6][6]big.Int) {
+	for i := 0; i < 6; i += 1 {
+		print_vec(mat[i])
+	}
+}
+
+print_vec :: proc(vec: [6]big.Int) {
+	vec := vec
+
+	for i := 0; i < 6; i += 1 {
+		num := print_big(vec[i])
+		defer delete(num)
+		fmt.print(num, " ")
+	}
+	fmt.println("")
+}
+
+print_big :: proc(num: big.Int) -> string {
+	num := num
+	scale: big.Int
+	big.int_set_from_integer(&scale, SCALE)
+	defer big.int_destroy(&scale)
+
+	t: big.Int
+	big.int_div(&t, &num, &scale)
+	defer big.int_destroy(&t)
+	v, _ := big.int_itoa_string(&t)
+	return v
 }
