@@ -14,8 +14,6 @@ import "core:strconv"
 import "core:strings"
 import "core:time"
 
-Big_Float :: distinct fixed.Fixed(i64, 20)
-
 Snow_Making_Error :: union {
 	Unable_To_Read_File,
 	Parse_Error,
@@ -205,7 +203,7 @@ process_file :: proc(
 	// 	} else do continue
 	// }
 
-	// solution, solved := position_stone(hailstones) or_return
+	// solution, solved := position_stone_bigint(hailstones) or_return
 	// defer for &s in solution do big.int_destroy(&s)
 	// if solved {
 	// 	fmt.println(solution)
@@ -362,38 +360,6 @@ intersects :: proc(a, b: Hailstone, min_pos, max_pos: int) -> bool {
 	return false
 }
 
-BF_Hailstone :: struct {
-	position: [3]Big_Float,
-	velocity: [3]Big_Float,
-}
-
-Bigstone :: struct {
-	position: [3]big.Int,
-	velocity: [3]big.Int,
-}
-
-to_bf_hailstone :: proc(hailstone: Hailstone) -> (bigstone: BF_Hailstone) {
-	fixed.init_from_f64(&bigstone.position.x, hailstone.position.x)
-	fixed.init_from_f64(&bigstone.position.y, hailstone.position.y)
-	fixed.init_from_f64(&bigstone.position.z, hailstone.position.z)
-	fixed.init_from_f64(&bigstone.velocity.x, hailstone.velocity.x)
-	fixed.init_from_f64(&bigstone.velocity.y, hailstone.velocity.y)
-	fixed.init_from_f64(&bigstone.velocity.z, hailstone.velocity.z)
-
-	return
-}
-
-to_bigstone :: proc(hailstone: Hailstone) -> (bigstone: Bigstone) {
-	big.int_set_from_integer(&bigstone.position.x, i64(hailstone.position.x))
-	big.int_set_from_integer(&bigstone.position.y, i64(hailstone.position.y))
-	big.int_set_from_integer(&bigstone.position.z, i64(hailstone.position.z))
-	big.int_set_from_integer(&bigstone.velocity.x, i64(hailstone.velocity.x))
-	big.int_set_from_integer(&bigstone.velocity.y, i64(hailstone.velocity.y))
-	big.int_set_from_integer(&bigstone.velocity.z, i64(hailstone.velocity.z))
-
-	return
-}
-
 position_stone_float :: proc(
 	hailstones: []Hailstone,
 	x: int = 274,
@@ -514,6 +480,90 @@ position_stone_float :: proc(
 
 		solved = true
 	}
+
+	return
+}
+
+// gaussian elimination
+solve_float :: proc(mat: [6][6]f64, vec: [6]f64) -> (p: [6]f64, solved: bool) {
+	mat := mat
+	vec := vec
+
+	for i := 0; i < 6; i += 1 {
+		// fmt.println("float:", i)
+		m: int
+		v: f64
+		for j := i; j < 6; j += 1 {
+			if math.abs(mat[j][i]) > v {
+				v = math.abs(mat[j][i])
+				m = j
+			}
+		}
+		if math.abs(v) < 1e-10 do return
+		tmp := vec[i]
+		vec[i] = vec[m]
+		vec[m] = tmp
+		for j := 0; j < 6; j += 1 {
+			tmp = mat[i][j]
+			mat[i][j] = mat[m][j]
+			mat[m][j] = tmp
+		}
+
+		// row reduction
+		for n := i + 1; n < 6; n += 1 {
+			r: f64 = mat[n][i] / mat[i][i]
+			// fmt.println("r:", r)
+			for k := i; k < 6; k += 1 {
+				mat[n][k] -= r * mat[i][k]
+				// fmt.println("mat[", n, k, "]=", mat[n][k])
+			}
+			vec[n] -= r * vec[i]
+			// fmt.println("vec[", n, "]=", vec[n])
+		}
+
+		// fmt.println("=====")
+		// for j := 0; j < 6; j += 1 {
+		// 	for k := 0; k < 6; k += 1 {
+		// 		fmt.printf("%.3f ", mat[j][k])
+		// 	}
+		// 	fmt.println("")
+		// }
+		// fmt.println("=====")
+		// for j := 0; j < 6; j += 1 {
+		// 	fmt.printf("%.3f ", vec[j])
+		// }
+		// fmt.println("")
+		// fmt.println("=====")
+	}
+
+	for i := 5; i >= 0; i -= 1 {
+		p[i] = vec[i]
+		for j := i + 1; j < 6; j += 1 {
+			p[i] -= mat[i][j] * p[j]
+		}
+		p[i] /= mat[i][i]
+	}
+
+	return p, true
+}
+
+///
+/// failed attempt of using fixed point
+///
+Big_Float :: distinct fixed.Fixed(i64, 20)
+
+BF_Hailstone :: struct {
+	position: [3]Big_Float,
+	velocity: [3]Big_Float,
+}
+
+to_bf_hailstone :: proc(hailstone: Hailstone) -> (bigstone: BF_Hailstone) {
+	fixed.init_from_f64(&bigstone.position.x, hailstone.position.x)
+	fixed.init_from_f64(&bigstone.position.y, hailstone.position.y)
+	fixed.init_from_f64(&bigstone.position.z, hailstone.position.z)
+	fixed.init_from_f64(&bigstone.velocity.x, hailstone.velocity.x)
+	fixed.init_from_f64(&bigstone.velocity.y, hailstone.velocity.y)
+	fixed.init_from_f64(&bigstone.velocity.z, hailstone.velocity.z)
 
 	return
 }
@@ -785,9 +835,28 @@ solve_fixed :: proc(
 	return p, true
 }
 
+///
+/// failed attempt of using bigint
+///
+Bigstone :: struct {
+	position: [3]big.Int,
+	velocity: [3]big.Int,
+}
+
+to_bigstone :: proc(hailstone: Hailstone) -> (bigstone: Bigstone) {
+	big.int_set_from_integer(&bigstone.position.x, i64(hailstone.position.x))
+	big.int_set_from_integer(&bigstone.position.y, i64(hailstone.position.y))
+	big.int_set_from_integer(&bigstone.position.z, i64(hailstone.position.z))
+	big.int_set_from_integer(&bigstone.velocity.x, i64(hailstone.velocity.x))
+	big.int_set_from_integer(&bigstone.velocity.y, i64(hailstone.velocity.y))
+	big.int_set_from_integer(&bigstone.velocity.z, i64(hailstone.velocity.z))
+
+	return
+}
+
 SCALE :: 100000000000000000
 
-position_stone :: proc(
+position_stone_bigint :: proc(
 	hailstones: []Hailstone,
 ) -> (
 	solution: [6]big.Int,
@@ -977,7 +1046,7 @@ position_stone :: proc(
 
 	print_vec(vec)
 
-	solution, solved = solve(mat, vec) or_return
+	solution, solved = solve_bigint(mat, vec) or_return
 	// if solved {
 	// 	fmt.println("found solution:")
 
@@ -990,7 +1059,7 @@ position_stone :: proc(
 }
 
 // gaussian elimination using big int
-solve :: proc(
+solve_bigint :: proc(
 	mat: [6][6]big.Int,
 	vec: [6]big.Int,
 ) -> (
@@ -1056,69 +1125,6 @@ solve :: proc(
 	}
 
 	return p, true, nil
-}
-
-// gaussian elimination
-solve_float :: proc(mat: [6][6]f64, vec: [6]f64) -> (p: [6]f64, solved: bool) {
-	mat := mat
-	vec := vec
-
-	for i := 0; i < 6; i += 1 {
-		// fmt.println("float:", i)
-		m: int
-		v: f64
-		for j := i; j < 6; j += 1 {
-			if math.abs(mat[j][i]) > v {
-				v = math.abs(mat[j][i])
-				m = j
-			}
-		}
-		if math.abs(v) < 1e-10 do return
-		tmp := vec[i]
-		vec[i] = vec[m]
-		vec[m] = tmp
-		for j := 0; j < 6; j += 1 {
-			tmp = mat[i][j]
-			mat[i][j] = mat[m][j]
-			mat[m][j] = tmp
-		}
-
-		// row reduction
-		for n := i + 1; n < 6; n += 1 {
-			r: f64 = mat[n][i] / mat[i][i]
-			// fmt.println("r:", r)
-			for k := i; k < 6; k += 1 {
-				mat[n][k] -= r * mat[i][k]
-				// fmt.println("mat[", n, k, "]=", mat[n][k])
-			}
-			vec[n] -= r * vec[i]
-			// fmt.println("vec[", n, "]=", vec[n])
-		}
-
-		// fmt.println("=====")
-		// for j := 0; j < 6; j += 1 {
-		// 	for k := 0; k < 6; k += 1 {
-		// 		fmt.printf("%.3f ", mat[j][k])
-		// 	}
-		// 	fmt.println("")
-		// }
-		// fmt.println("=====")
-		// for j := 0; j < 6; j += 1 {
-		// 	fmt.printf("%.3f ", vec[j])
-		// }
-		// fmt.println("")
-		// fmt.println("=====")
-	}
-
-	for i := 5; i >= 0; i -= 1 {
-		p[i] = vec[i]
-		for j := i + 1; j < 6; j += 1 {
-			p[i] -= mat[i][j] * p[j]
-		}
-		p[i] /= mat[i][i]
-	}
-
-	return p, true
 }
 
 print_mat :: proc(mat: [6][6]big.Int) {
