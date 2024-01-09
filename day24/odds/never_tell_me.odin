@@ -99,29 +99,6 @@ main :: proc() {
 	fmt.printf("answer: part1 = %d part2 = %d\n", part1, part2)
 	fmt.printf("time took %v\n", time_took)
 	// fmt.printf("memory used %v bytes\n", memory_used)
-	// a, b: Big_Float
-	// fixed.init_from_f64(&a, 1)
-	// fixed.init_from_f64(&b, -2)
-	// c := fixed.div(a, b)
-	// fmt.println(
-	// 	"fixed.div(",
-	// 	print_fixed(a),
-	// 	",",
-	// 	print_fixed(b),
-	// 	")=",
-	// 	print_fixed(c),
-	// )
-	// c = fixed_div(a, b)
-	// fmt.println(print_fixed(a), "/", print_fixed(b), "=", print_fixed(c))
-	// fixed.init_from_f64(&a, 3.999999997987)
-	// fmt.println("fixed.round(", print_fixed(a), ")=", fixed.round(a))
-	// fmt.println("fixed.ceil(", print_fixed(a), ")=", fixed.ceil(a))
-	// fmt.println("fixed.floor(", print_fixed(a), ")=", fixed.floor(a))
-	// fixed.init_from_f64(&b, -2.00000001)
-	// c = fixed_round(a)
-	// fmt.println("rounded(", print_fixed(a), ")=", print_fixed(c))
-	// c = fixed_round(b)
-	// fmt.println("rounded(", print_fixed(b), ")=", print_fixed(c))
 }
 
 process_file :: proc(
@@ -158,66 +135,28 @@ process_file :: proc(
 		}
 	}
 
-	solved := false
-	thrown: Hailstone
 	// had to use pre-selected values due to f64 numeric errors
-	if len(hailstones) > 274 {
-		thrown, solved = position_stone_float(hailstones)
-	} else {
-		thrown, solved = position_stone_float(hailstones, 0, 1, 2)
-	}
+	stone, solved := position_stone(hailstones)
 	if solved {
-		fmt.println(thrown)
-		px := u64(math.round(thrown.position.x))
-		py := u64(math.round(thrown.position.y))
-		pz := u64(math.round(thrown.position.z))
-		part2 = px + py + pz
-		fmt.println(px, "+", py, "+", pz, "=", part2)
+		fmt.println(
+			"p:",
+			[3]i64 {
+				i64(stone.position.x),
+				i64(stone.position.y),
+				i64(stone.position.z),
+			},
+			"v:",
+			[3]i64 {
+				i64(stone.velocity.x),
+				i64(stone.velocity.y),
+				i64(stone.velocity.z),
+			},
+		)
+		part2 = u64(math.sum(stone.position[:]))
 	} else {
 		fmt.println("no solution; choose another set of stones")
 	}
 
-	// solution, found := position_stone_fixed(hailstones)
-	// if found {
-	// 	fmt.println(solution)
-	// 	sum := solution.position.x + solution.position.y + solution.position.z
-	// 	fmt.println("fixed.part2:", sum)
-	// }
-	// 886858737029295
-	// for !solved {
-	// 	x := rand.int_max(len(hailstones))
-	// 	y := rand.int_max(len(hailstones))
-	// 	z := rand.int_max(len(hailstones))
-	// 	thrownf, solvedf := position_stone_float(hailstones, x, y, z)
-	// 	if solvedf {
-	// 		if u64(
-	// 			   thrownf.position.x +
-	// 			   thrownf.position.y +
-	// 			   thrownf.position.z,
-	// 		   ) ==
-	// 		   886858737029295 {
-	// 			fmt.println(x, y, z)
-	// 			break
-	// 		}
-
-	// 	} else do continue
-	// }
-
-	// solution, solved := position_stone_bigint(hailstones) or_return
-	// defer for &s in solution do big.int_destroy(&s)
-	// if solved {
-	// 	fmt.println(solution)
-	// 	answer: big.Int
-	// 	defer big.int_destroy(&answer)
-	// 	big.int_add(&answer, &solution[0], &solution[1])
-	// 	big.int_add(&answer, &answer, &solution[2])
-
-	// 	fmt.println("part2.bigint:", solution)
-
-	// 	part2 = int(big.int_get_i64(&answer) or_return)
-	// } else {
-	// 	fmt.println("no solution; choose another set of stones")
-	// }
 	return
 }
 
@@ -267,6 +206,83 @@ parse_hailstones :: proc(lines: []string) -> []Hailstone {
 	}
 
 	return hailstones
+}
+
+// based on https://github.com/lerno/aoc_2023_c3/blob/main/day24.c3
+// need to find p and v
+// p = a + (b -v) * t
+// p = c + (d - v) * s
+// p = e + (f - v) * r
+// a + (b - v) * t = c + (d - v) * s
+// c + (d - v) * s = e + (f - v) * r
+position_stone :: proc(
+	hailstones: []Hailstone,
+) -> (
+	stone: Hailstone,
+	solved: bool,
+) {
+	a := hailstones[0].position
+	b := hailstones[0].velocity
+	c := hailstones[1].position
+	d := hailstones[1].velocity
+	e := hailstones[2].position
+	f := hailstones[2].velocity
+
+	for x := -500; x <= 500; x += 1 {
+		for y := -500; y <= 500; y += 1 {
+			b_v := b.xy - {f64(x), f64(y)}
+			d_v := d.xy - {f64(x), f64(y)}
+
+			t, found := find_intersection_time(c.xy, d_v, a.xy, b_v)
+
+			if !found do continue
+
+			f_v := f.xy - {f64(x), f64(y)}
+			s, found2 := find_intersection_time(c.xy, d_v, e.xy, f_v)
+
+			if !found2 do continue
+
+			if t != s do continue
+
+			r, _ := find_intersection_time(e.xy, f_v, c.xy, d_v)
+			// s * d_v.z + c.z = r * f_v.z + e.z
+			// z = (w * f.z + e.z - s * d.z - c.z) / (r - s)
+			z: f64 = (f64(r) * f.z + e.z - f64(s) * d.z - c.z) / f64(r - s)
+
+			// p = c + (d - v) * s
+			stone.velocity = [3]f64{f64(x), f64(y), f64(z)}
+			stone.position = c + (d - stone.velocity) * f64(s)
+			return stone, true
+		}
+	}
+
+	return
+}
+
+find_intersection_time :: proc(
+	p1, v1, p2, v2: [2]f64,
+) -> (
+	t: i64,
+	solved: bool,
+) {
+	p1_i := [2]i64{i64(p1.x), i64(p1.y)}
+	p2_i := [2]i64{i64(p2.x), i64(p2.y)}
+	v1_i := [2]i64{i64(v1.x), i64(v1.y)}
+	v2_i := [2]i64{i64(v2.x), i64(v2.y)}
+
+	det: i64 = linalg.vector_cross2(v1_i.xy, v2_i.xy)
+	if det != 0 {
+		t =
+			linalg.vector_cross2(p2_i.xy, v2_i.xy) +
+			linalg.vector_cross2(v2_i.xy, p1_i.xy)
+		if t % det == 0 {
+			t /= det
+			if t >= 0 {
+				return t, true
+			}
+		}
+	}
+	return 0, false
 }
 
 // same as intersects but without division
