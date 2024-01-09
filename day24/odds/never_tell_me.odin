@@ -1,11 +1,11 @@
 package odds
 
-import q "core:container/queue"
 import "core:fmt"
 import "core:log"
 import "core:math"
 import "core:math/big"
 import "core:math/fixed"
+import "core:math/linalg"
 import "core:math/rand"
 import "core:mem"
 import "core:os"
@@ -35,6 +35,11 @@ Unable_To_Read_File :: struct {
 Hailstone :: struct {
 	position: [3]f64,
 	velocity: [3]f64,
+}
+
+Stone :: struct {
+	position: [3]i64,
+	velocity: [3]i64,
 }
 
 main :: proc() {
@@ -147,7 +152,7 @@ process_file :: proc(
 		a := hailstones[i]
 		for j := i + 1; j < len(hailstones); j += 1 {
 			b := hailstones[j]
-			if intersects(a, b, min, max) {
+			if collides(a, b, min, max) {
 				part1 += 1
 			} else {
 				// fmt.println(a, "doesn't intersect", b)
@@ -218,6 +223,30 @@ process_file :: proc(
 	return
 }
 
+parse_stones :: proc(lines: []string) -> []Stone {
+	hailstones := make([]Stone, len(lines))
+
+	for line, i in lines {
+		values := strings.split_multi(line, []string{",", "@"})
+		defer delete(values)
+		assert(len(values) == 6)
+		hailstones[i] =  {
+			 {
+				i64(strconv.atof(strings.trim_space(values[0]))),
+				i64(strconv.atof(strings.trim_space(values[1]))),
+				i64(strconv.atof(strings.trim_space(values[2]))),
+			},
+			 {
+				i64(strconv.atof(strings.trim_space(values[3]))),
+				i64(strconv.atof(strings.trim_space(values[4]))),
+				i64(strconv.atof(strings.trim_space(values[5]))),
+			},
+		}
+	}
+
+	return hailstones
+}
+
 parse_hailstones :: proc(lines: []string) -> []Hailstone {
 	hailstones := make([]Hailstone, len(lines))
 
@@ -242,6 +271,69 @@ parse_hailstones :: proc(lines: []string) -> []Hailstone {
 	return hailstones
 }
 
+// same as intersects but without division
+collides :: proc(a, b: Hailstone, min_pos, max_pos: int) -> bool {
+	d := b.position - a.position
+	// det := b.velocity.x * a.velocity.y - b.velocity.y * a.velocity.x
+	det := linalg.vector_cross2(b.velocity.xy, a.velocity.xy)
+
+	if det == 0 {
+		return a.position.x == b.position.x || a.position.y == b.position.y
+	}
+
+
+	// if u >= 0 && v >= 0 {
+	// 	i := a.position + a.velocity * u
+	// 	if i.x >= f64(min_pos) &&
+	// 	   i.x <= f64(max_pos) &&
+	// 	   i.y >= f64(min_pos) &&
+	// 	   i.y <= f64(max_pos) {
+	// 		return true
+	// 	}
+	// }
+	// scaled_u := (d.y * b.velocity.x - d.x * b.velocity.y) / det
+	// scaled_v := (d.y * a.velocity.x - d.x * a.velocity.y) / det
+	// u * det = b.velocity X d
+	// v * det = a.velocity X d
+	u := linalg.vector_cross2(b.velocity.xy, d.xy)
+	v := linalg.vector_cross2(a.velocity.xy, d.xy)
+
+	// since we are not doing multiplication, we have to know the sign by
+	// XORing the bits
+	is_u_neg := (u < 0) ~ (det < 0)
+	is_v_neg := (v < 0) ~ (det < 0)
+
+	if is_u_neg || is_v_neg do return false
+
+	// min <= i <= max
+	// min <= a.p + a.v*u <= max
+	// min - a.p <= a.v*u <= max - a.p
+	// if det > 0:
+	// (min - a.p)*det <= a.v*u*det <= (max - a.p)*det
+	// if det < 0:
+	// (min - a.p)*det >= a.v*u*det <= (max - a.p)*det
+
+	lower_bound := [2]f64{f64(min_pos), f64(min_pos)}
+	higher_bound := [2]f64{f64(max_pos), f64(max_pos)}
+
+	// swap them
+	if det < 0 {
+		lower_bound, higher_bound = higher_bound, lower_bound
+	}
+
+	// shift the bounds so that we can compare them with the undivided versions
+	// of `i`
+	lower_bound = (lower_bound - a.position.xy) * det
+	higher_bound = (higher_bound - a.position.xy) * det
+
+	i := a.velocity * u
+
+	x_inbound := lower_bound.x <= i.x && i.x <= higher_bound.x
+	y_inbound := lower_bound.y <= i.y && i.y <= higher_bound.y
+
+	return x_inbound && y_inbound
+}
+
 intersects :: proc(a, b: Hailstone, min_pos, max_pos: int) -> bool {
 	d := b.position - a.position
 	// fmt.println("d:", d)
@@ -249,12 +341,8 @@ intersects :: proc(a, b: Hailstone, min_pos, max_pos: int) -> bool {
 	// fmt.println("det:", det)
 
 	if det == 0 {
-		if a.position.x == b.position.x || a.position.y == b.position.y {
-			// colinear
-			// fmt.println(a, "is colinear with", b)
-			return true
-		}
-		return false
+		// colinear if true
+		return a.position.x == b.position.x || a.position.y == b.position.y
 	}
 
 	u := (d.y * b.velocity.x - d.x * b.velocity.y) / det
